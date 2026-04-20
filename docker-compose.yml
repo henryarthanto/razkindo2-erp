@@ -2,19 +2,14 @@
 # Razkindo2 ERP - Docker Compose (CasaOS Compatible)
 # Next.js 16 + Prisma + Supabase PostgreSQL
 # ============================================================
-# Cara pakai di CasaOS:
-#   1. Clone repo: git clone https://github.com/henryarthanto/razkindo2-erp.git
-#   2. Masuk folder: cd razkindo2-erp
-#   3. Buat .env: cp .env.example .env  (atau jalankan ./setup.sh)
-#   4. Edit .env, isi NEXTAUTH_URL dengan URL ngrok Anda
-#   5. Jalankan: docker compose up -d --build
-# ============================================================
 
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
+      # Untuk device storage kecil, uncomment baris ini:
+      # no_cache: true
     container_name: razkindo2-erp
     restart: unless-stopped
     ports:
@@ -36,13 +31,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 512M
         reservations:
-          memory: 256M
-    labels:
-      - "com.casaos.app.name=Razkindo2 ERP"
-      - "com.casaos.app.description=ERP System - Sales, Inventory, Finance"
-      - "com.casaos.app.port=3000"
+          memory: 128M
 
 volumes:
   uploads-data:

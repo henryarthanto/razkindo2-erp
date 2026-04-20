@@ -19,3 +19,10 @@ check-db.ts
 mem_log.txt
 .claude
 .z-ai-config
+Caddyfile
+worklog.md
+setup.sh
+docker-compose.yml
+Dockerfile
+.dockerignore
+README.md

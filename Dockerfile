@@ -1,66 +1,39 @@
 # ============================================================
-# Razkindo2 ERP - Multi-stage Docker Build
-# Next.js 16 + Prisma + Supabase PostgreSQL
+# Razkindo2 ERP - Single-stage Docker Build (Low Storage)
+# Optimized for AML S9xx TV Box / CasaOS with limited storage
 # ============================================================
 
-# Stage 1: Dependencies
-FROM node:20-alpine AS deps
+FROM node:20-alpine
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-COPY package.json bun.lock* package-lock.json* ./
-RUN \
-  if [ -f bun.lock ]; then \
-    npm install -g bun && bun install --frozen-lockfile; \
-  elif [ -f package-lock.json ]; then \
-    npm ci; \
-  else \
-    npm install; \
-  fi
+# Copy only what's needed first (for better cache)
+COPY package.json ./
+COPY prisma ./prisma
 
-# Stage 2: Build
-FROM node:20-alpine AS builder
-WORKDIR /app
+# Install dependencies & clean cache in ONE layer to save space
+RUN npm install --omit=dev --no-optional && \
+    npx prisma generate && \
+    npm cache clean --force && \
+    rm -rf /tmp/* /root/.npm
 
-COPY --from=deps /app/node_modules ./node_modules
+# Copy source code
 COPY . .
 
-# Generate Prisma Client
-RUN npx prisma generate
-
-# Build Next.js (standalone output)
+# Build Next.js standalone
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+RUN npm run build && \
+    rm -rf /root/.npm /tmp/* && \
+    rm -rf node_modules && \
+    cp -r .next/standalone/node_modules . 2>/dev/null; \
+    echo "Build done"
 
-# Stage 3: Production
-FROM node:20-alpine AS runner
-WORKDIR /app
-
+# Production settings
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-
-# Copy built assets from builder
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-
-# Copy Prisma schema and migrations for runtime
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-
-# Copy mini-services if any
-COPY --from=builder /app/mini-services ./mini-services
-
-USER nextjs
-
-EXPOSE 3000
-
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Start the application
+EXPOSE 3000
+
 CMD ["node", "server.js"]
