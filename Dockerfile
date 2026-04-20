@@ -1,34 +1,21 @@
 # ============================================================
-# Razkindo2 ERP - Docker Build (Pre-installed deps)
-# ============================================================
-# STRATEGI: Install node_modules di HOST dulu, lalu copy ke Docker
-#   Keuntungan: Bisa retry npm install kalau koneksi putus
-#   Tanpa Docker: npm install gagal = ulang, gampang!
+# Razkindo2 ERP - Minimal Production Image
+# Hanya copy pre-built output, TIDAK ada build di dalam Docker
 #
 # Langkah di MacBook:
 #   1. npm install
 #   2. npx prisma generate
-#   3. docker compose build
-#   4. docker save razkindo2-erp-app:latest | gzip > erp-image.tar.gz
-#   5. scp erp-image.tar.gz root@IP-STB:/tmp/
+#   3. npm run build
+#   4. docker compose build
+#   5. docker save razkindo2-erp:latest | gzip > erp-image.tar.gz
+#   6. scp erp-image.tar.gz root@IP-STB:/tmp/
 #
 # Langkah di STB:
 #   1. docker load < /tmp/erp-image.tar.gz
 #   2. docker compose up -d
 # ============================================================
 
-FROM node:20-alpine AS builder
-WORKDIR /app
-
-# Copy semua termasuk node_modules dari host
-COPY . .
-
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_OPTIONS="--max-old-space-size=384"
-RUN npm run build
-
-# ---- Production ----
-FROM node:20-alpine AS runner
+FROM node:20-alpine
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -39,12 +26,15 @@ ENV HOSTNAME="0.0.0.0"
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+# Copy pre-built standalone output dari host
+COPY .next/standalone ./
+COPY .next/static ./.next/static
+COPY public ./public
+COPY prisma ./prisma
+
+# Install Linux ARM64 native binaries yang diperlukan runtime
+RUN apk add --no-cache openssl && \
+    npm install @prisma/client prisma lightningcss-linux-arm64-musl @next/swc-linux-arm64-musl sharp --no-save 2>/dev/null || true
 
 RUN chown -R nextjs:nodejs /app
 USER nextjs

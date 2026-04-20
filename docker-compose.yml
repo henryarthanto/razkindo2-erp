@@ -1,17 +1,13 @@
 # ============================================================
-# Razkindo2 ERP - Docker Compose (STB / CasaOS)
+# Razkindo2 ERP - Docker Compose
 # ============================================================
 
 services:
   app:
-    # Jika build sendiri:
     build:
       context: .
       dockerfile: Dockerfile
-
-    # Jika sudah load image dari MacBook (comment build di atas, uncomment ini):
-    # image: razkindo2-erp-app:latest
-
+    image: razkindo2-erp:latest
     container_name: razkindo2-erp
     restart: unless-stopped
     ports:
