@@ -1,28 +1,17 @@
 # ============================================================
-# Razkindo2 ERP - Docker Compose (CasaOS Compatible)
-# ============================================================
-#
-# CARA 1: Pre-built image (RECOMMENDED untuk storage kecil)
-#   Tidak perlu build di device, cukup pull image dari GitHub
-#   Image sudah di-build oleh GitHub Actions
-#
-# CARA 2: Build lokal menggunakan build.sh
-#   ./build.sh
-#   docker compose up -d
-#
-# CARA 3: Build langsung (butuh storage ~2GB)
-#   docker compose up -d --build
+# Razkindo2 ERP - Docker Compose
 # ============================================================
 
 services:
   app:
-    # ---- CARA 1: Pre-built image (RECOMMENDED) ----
-    image: ghcr.io/henryarthanto/razkindo2-erp:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
 
-    # ---- CARA 2 & 3: Build lokal (uncomment jika build sendiri) ----
-    # build:
-    #   context: .
-    #   dockerfile: Dockerfile
+    # Jika ingin pakai pre-built image (setelah GitHub Actions selesai):
+    #   Comment "build:" section di atas
+    #   Uncomment baris di bawah:
+    # image: ghcr.io/henryarthanto/razkindo2-erp:latest
 
     container_name: razkindo2-erp
     restart: unless-stopped
