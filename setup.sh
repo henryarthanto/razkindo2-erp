@@ -3,6 +3,7 @@
 # Razkindo2 ERP - Setup Script for CasaOS + Ngrok
 # ============================================================
 # Cara pakai:
+#   cd /DATA/AppData
 #   git clone https://github.com/henryarthanto/razkindo2-erp.git
 #   cd razkindo2-erp
 #   chmod +x setup.sh
@@ -14,6 +15,7 @@ set -e
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
+CYAN='\033[0;36m'
 NC='\033[0m'
 
 echo ""
@@ -22,7 +24,7 @@ echo "  🔧 Razkindo2 ERP - Setup untuk CasaOS + Ngrok"
 echo "============================================================"
 echo ""
 
-# Step 1: Buat direktori jika belum ada
+# Step 1: Buat direktori
 echo -e "${YELLOW}[1/4] Membuat direktori...${NC}"
 mkdir -p data/uploads
 echo -e "${GREEN}  ✓ Direktori data/uploads dibuat${NC}"
@@ -30,21 +32,9 @@ echo -e "${GREEN}  ✓ Direktori data/uploads dibuat${NC}"
 # Step 2: Buat file .env
 echo -e "${YELLOW}[2/4] Membuat file .env...${NC}"
 
-# Cek apakah .env sudah ada
 if [ -f .env ]; then
-    echo -e "${RED}  ⚠ File .env sudah ada!${NC}"
-    read -p "  Timpa dengan yang baru? (y/n): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "  Skip membuat .env"
-    else
-        create_env=true
-    fi
+    echo -e "${YELLOW}  File .env sudah ada, skip${NC}"
 else
-    create_env=true
-fi
-
-if [ "$create_env" = true ]; then
 cat > .env << 'ENVFILE'
 # ============================================================
 # Razkindo ERP - Environment Configuration
@@ -73,14 +63,12 @@ fi
 # Step 3: Tanya URL ngrok
 echo ""
 echo -e "${YELLOW}[3/4] Konfigurasi Ngrok URL${NC}"
-echo "  Jika Anda menggunakan ngrok, masukkan URL ngrok Anda."
-echo "  Contoh: https://abc123.ngrok-free.app"
+echo "  Masukkan URL ngrok Anda (contoh: https://abc123.ngrok-free.app)"
 echo "  Tekan Enter saja jika belum tahu (bisa diedit nanti di .env)"
 echo ""
 read -p "  Ngrok URL (atau Enter untuk skip): " NGROK_URL
 
 if [ -n "$NGROK_URL" ]; then
-    # Hapus trailing slash
     NGROK_URL="${NGROK_URL%/}"
     sed -i "s|NEXTAUTH_URL=.*|NEXTAUTH_URL=$NGROK_URL|g" .env
     echo -e "${GREEN}  ✓ NEXTAUTH_URL diset ke: $NGROK_URL${NC}"
@@ -89,19 +77,65 @@ else
     echo "  Edit file .env nanti setelah dapat URL ngrok${NC}"
 fi
 
-# Step 4: Build & Run
+# Step 4: Pilih cara build
 echo ""
-echo -e "${YELLOW}[4/4] Siap menjalankan Docker!${NC}"
+echo -e "${YELLOW}[4/4] Pilih cara menjalankan:${NC}"
 echo ""
-echo "  Untuk memulai, jalankan:"
+echo -e "  ${CYAN}A) Pull pre-built image (RECOMMENDED - hemat storage)${NC}"
+echo "     Image sudah di-build oleh GitHub, tinggal pull & run"
+echo "     Kebutuhan: ~200MB storage"
 echo ""
-echo -e "  ${GREEN}docker compose up -d --build${NC}"
+echo -e "  ${CYAN}B) Build lokal dengan build.sh (2-step, hemat storage)${NC}"
+echo "     Build di container sementara, extract, buang, buat image kecil"
+echo "     Kebutuhan: ~1.5GB storage sementara"
 echo ""
-echo "  Untuk melihat log:"
-echo -e "  ${GREEN}docker compose logs -f${NC}"
+echo -e "  ${CYAN}C) Build langsung (docker compose build)${NC}"
+echo "     Build biasa, butuh storage ~2GB+"
 echo ""
-echo "  Untuk stop:"
-echo -e "  ${GREEN}docker compose down${NC}"
+read -p "  Pilihan (A/B/C): " -n 1 -r
+echo ""
+
+case $REPLY in
+    A|a)
+        echo ""
+        echo -e "${GREEN}Menjalankan dengan pre-built image...${NC}"
+        docker compose up -d
+        echo ""
+        echo -e "${GREEN}  ✓ Container berjalan!${NC}"
+        echo "  Cek: docker compose logs -f"
+        ;;
+    B|b)
+        echo ""
+        echo -e "${GREEN}Building dengan build.sh (2-step)...${NC}"
+        chmod +x build.sh
+        ./build.sh
+        # Uncomment build lokal di docker-compose
+        sed -i 's|image: ghcr.io/|# image: ghcr.io/|g' docker-compose.yml
+        sed -i 's|# build:|build:|g' docker-compose.yml
+        sed -i 's|#   context:|  context:|g' docker-compose.yml
+        sed -i 's|#   dockerfile:|  dockerfile:|g' docker-compose.yml
+        docker compose up -d
+        echo ""
+        echo -e "${GREEN}  ✓ Container berjalan!${NC}"
+        ;;
+    C|c)
+        echo ""
+        echo -e "${GREEN}Building langsung...${NC}"
+        # Uncomment build lokal di docker-compose
+        sed -i 's|image: ghcr.io/|# image: ghcr.io/|g' docker-compose.yml
+        sed -i 's|# build:|build:|g' docker-compose.yml
+        sed -i 's|#   context:|  context:|g' docker-compose.yml
+        sed -i 's|#   dockerfile:|  dockerfile:|g' docker-compose.yml
+        DOCKER_BUILDKIT=1 docker compose up -d --build
+        echo ""
+        echo -e "${GREEN}  ✓ Container berjalan!${NC}"
+        ;;
+    *)
+        echo ""
+        echo "  Skip build. Jalankan manual nanti."
+        ;;
+esac
+
 echo ""
 echo "============================================================"
 echo "  ⚡ Jika pakai ngrok, jalankan di terminal terpisah:"

@@ -1,15 +1,29 @@
 # ============================================================
 # Razkindo2 ERP - Docker Compose (CasaOS Compatible)
-# Next.js 16 + Prisma + Supabase PostgreSQL
+# ============================================================
+#
+# CARA 1: Pre-built image (RECOMMENDED untuk storage kecil)
+#   Tidak perlu build di device, cukup pull image dari GitHub
+#   Image sudah di-build oleh GitHub Actions
+#
+# CARA 2: Build lokal menggunakan build.sh
+#   ./build.sh
+#   docker compose up -d
+#
+# CARA 3: Build langsung (butuh storage ~2GB)
+#   docker compose up -d --build
 # ============================================================
 
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      # Untuk device storage kecil, uncomment baris ini:
-      # no_cache: true
+    # ---- CARA 1: Pre-built image (RECOMMENDED) ----
+    image: ghcr.io/henryarthanto/razkindo2-erp:latest
+
+    # ---- CARA 2 & 3: Build lokal (uncomment jika build sendiri) ----
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+
     container_name: razkindo2-erp
     restart: unless-stopped
     ports:

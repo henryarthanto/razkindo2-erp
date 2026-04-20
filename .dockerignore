@@ -1,6 +1,7 @@
 node_modules
 .next
 .git
+.github
 .gitignore
 .env*
 !.env.example
@@ -22,7 +23,10 @@ mem_log.txt
 Caddyfile
 worklog.md
 setup.sh
+build.sh
+Dockerfile.prod
 docker-compose.yml
 Dockerfile
 .dockerignore
-README.md
+dist/
+data/
