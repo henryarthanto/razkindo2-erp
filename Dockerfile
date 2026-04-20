@@ -1,40 +1,33 @@
 # ============================================================
-# Razkindo2 ERP - Ultra-Optimized Docker Build (Low Storage)
-# For AML S9xx TV Box / CasaOS with limited storage
-#
-# Menggunakan BuildKit cache mounts untuk hemat space:
-#   DOCKER_BUILDKIT=1 docker compose up -d --build
+# Razkindo2 ERP - Docker Build (Low Storage STB)
+# Untuk AML S9xx TV Box / CasaOS
+# Build: DOCKER_BUILDKIT=1 docker compose up -d --build
 # ============================================================
 
 # syntax=docker/dockerfile:1
 
-# ---- Stage 1: Dependencies (cached separately) ----
-FROM node:20-alpine AS deps
-WORKDIR /app
-
-COPY package.json ./
-COPY prisma ./prisma
-
-# Cache mount: npm cache disimpan terpisah, tidak masuk image layer
-RUN --mount=type=cache,target=/root/.npm,id=npm-cache \
-    npm install && \
-    npx prisma generate
-
-# ---- Stage 2: Build ----
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/prisma ./prisma
+# Copy package files dulu (layer caching)
+COPY package.json ./
+COPY prisma ./prisma
+
+# Install deps + prisma generate + cleanup dalam 1 layer
+RUN --mount=type=cache,target=/root/.npm \
+    npm install && \
+    npx prisma generate && \
+    rm -rf /root/.npm/_cacache
+
+# Copy source
 COPY . .
 
+# Build + cleanup dalam 1 layer
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_OPTIONS="--max-old-space-size=512"
+ENV NODE_OPTIONS="--max-old-space-size=384"
+RUN npm run build
 
-RUN npm run build && \
-    rm -rf /tmp/*
-
-# ---- Stage 3: Production (Minimal) ----
+# ---- Production ----
 FROM node:20-alpine AS runner
 WORKDIR /app
 
@@ -43,11 +36,10 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Non-root user
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-# Hanya copy yang diperlukan dari standalone output
+# Copy hanya file production dari standalone
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
@@ -56,9 +48,7 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
 RUN chown -R nextjs:nodejs /app
-
 USER nextjs
 
 EXPOSE 3000
-
 CMD ["node", "server.js"]

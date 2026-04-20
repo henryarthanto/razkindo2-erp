@@ -1,5 +1,5 @@
 # ============================================================
-# Razkindo2 ERP - Docker Compose
+# Razkindo2 ERP - Docker Compose (STB / CasaOS)
 # ============================================================
 
 services:
@@ -7,12 +7,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-
-    # Jika ingin pakai pre-built image (setelah GitHub Actions selesai):
-    #   Comment "build:" section di atas
-    #   Uncomment baris di bawah:
-    # image: ghcr.io/henryarthanto/razkindo2-erp:latest
-
     container_name: razkindo2-erp
     restart: unless-stopped
     ports:
@@ -23,21 +17,9 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - HOSTNAME=0.0.0.0
-    volumes:
-      - uploads-data:/app/uploads
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 128M
-
-volumes:
-  uploads-data:
-    driver: local
