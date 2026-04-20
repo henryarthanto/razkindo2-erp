@@ -1,28 +1,26 @@
 # ============================================================
-# Razkindo2 ERP - Docker Build (Low Storage STB)
-# Untuk AML S9xx TV Box / CasaOS
-# Build: DOCKER_BUILDKIT=1 docker compose up -d --build
+# Razkindo2 ERP - Docker Build
 # ============================================================
-
-# syntax=docker/dockerfile:1
+# CARA 1: Build di device yang kuat (MacBook), lalu transfer
+#   - Di MacBook: docker compose build
+#   - Save: docker save razkindo2-erp-app:latest | gzip > erp-image.tar.gz
+#   - Transfer: scp erp-image.tar.gz root@IP-STB:/tmp/
+#   - Di STB: docker load < /tmp/erp-image.tar.gz
+#
+# CARA 2: Build langsung di STB (butuh koneksi stabil + 2GB)
+#   DOCKER_BUILDKIT=1 docker compose up -d --build
+# ============================================================
 
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Copy package files dulu (layer caching)
 COPY package.json ./
 COPY prisma ./prisma
 
-# Install deps + prisma generate + cleanup dalam 1 layer
-RUN --mount=type=cache,target=/root/.npm \
-    npm install && \
-    npx prisma generate && \
-    rm -rf /root/.npm/_cacache
+RUN npm install && npx prisma generate
 
-# Copy source
 COPY . .
 
-# Build + cleanup dalam 1 layer
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_OPTIONS="--max-old-space-size=384"
 RUN npm run build
@@ -39,7 +37,6 @@ ENV HOSTNAME="0.0.0.0"
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-# Copy hanya file production dari standalone
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
