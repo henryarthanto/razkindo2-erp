@@ -1,24 +1,26 @@
 # ============================================================
-# Razkindo2 ERP - Docker Build
+# Razkindo2 ERP - Docker Build (Pre-installed deps)
 # ============================================================
-# CARA 1: Build di device yang kuat (MacBook), lalu transfer
-#   - Di MacBook: docker compose build
-#   - Save: docker save razkindo2-erp-app:latest | gzip > erp-image.tar.gz
-#   - Transfer: scp erp-image.tar.gz root@IP-STB:/tmp/
-#   - Di STB: docker load < /tmp/erp-image.tar.gz
+# STRATEGI: Install node_modules di HOST dulu, lalu copy ke Docker
+#   Keuntungan: Bisa retry npm install kalau koneksi putus
+#   Tanpa Docker: npm install gagal = ulang, gampang!
 #
-# CARA 2: Build langsung di STB (butuh koneksi stabil + 2GB)
-#   DOCKER_BUILDKIT=1 docker compose up -d --build
+# Langkah di MacBook:
+#   1. npm install
+#   2. npx prisma generate
+#   3. docker compose build
+#   4. docker save razkindo2-erp-app:latest | gzip > erp-image.tar.gz
+#   5. scp erp-image.tar.gz root@IP-STB:/tmp/
+#
+# Langkah di STB:
+#   1. docker load < /tmp/erp-image.tar.gz
+#   2. docker compose up -d
 # ============================================================
 
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-COPY package.json ./
-COPY prisma ./prisma
-
-RUN npm install && npx prisma generate
-
+# Copy semua termasuk node_modules dari host
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
