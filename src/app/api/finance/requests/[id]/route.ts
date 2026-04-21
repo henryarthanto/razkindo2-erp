@@ -383,7 +383,7 @@ async function updateGoodsStatus(existingRequest: any, data: any) {
       const { error: rpcError } = await db.rpc('increment_stock_with_hpp', {
         p_product_id: item.productId,
         p_qty: stockQty,
-        p_cost_per_unit: purchaseHpp
+        p_new_hpp: purchaseHpp
       });
       if (rpcError) {
         // Fallback to non-atomic if RPC fails
@@ -426,7 +426,9 @@ async function updateGoodsStatus(existingRequest: any, data: any) {
   return toCamelCase(updated);
 }
 
-async function generateInvoiceNo(type: string, prefix: string): Promise<string> {
+// Local invoice number generator with custom prefix support
+// (differs from supabase-helpers.generateInvoiceNo which uses type-based prefix)
+async function generateLocalInvoiceNo(type: string, prefix: string): Promise<string> {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const { count } = await db.from('transactions').select('*', { count: 'exact', head: true }).eq('type', type).gte('created_at', monthStart);
@@ -435,7 +437,7 @@ async function generateInvoiceNo(type: string, prefix: string): Promise<string> 
 }
 
 async function createPurchaseTransaction(existingRequest: any, data: any): Promise<string> {
-  const invoiceNo = await generateInvoiceNo('purchase', 'PO');
+  const invoiceNo = await generateLocalInvoiceNo('purchase', 'PO');
   let items: any[] = [];
   try { items = existingRequest.purchase_items ? JSON.parse(existingRequest.purchase_items) : []; } catch { items = []; }
   const total = items.reduce((sum: number, item: any) => sum + (item.qty * (item.price ?? item.hpp ?? 0)), 0) || existingRequest.amount;
@@ -480,7 +482,7 @@ async function createPurchaseTransaction(existingRequest: any, data: any): Promi
 }
 
 async function createExpenseTransaction(existingRequest: any, data: any): Promise<string> {
-  const invoiceNo = await generateInvoiceNo('expense', 'EXP');
+  const invoiceNo = await generateLocalInvoiceNo('expense', 'EXP');
   const transactionData = toSnakeCase({
     type: 'expense', invoiceNo, unitId: existingRequest.unit_id, createdById: data.processedById,
     total: existingRequest.amount, paidAmount: existingRequest.amount, remainingAmount: 0,

@@ -14,8 +14,9 @@ export async function POST(request: NextRequest) {
 
     // ============ NON-ERP EMPLOYEE (custom role) ============
     if (customRoleId) {
-      if (!name || typeof name !== 'string' || !name.trim()) {
-        return NextResponse.json({ error: 'Nama wajib diisi' }, { status: 400 });
+      const nonErpValidation = validateBody(authSchemas.registerNonErp, { name, phone, customRoleId, unitId, unitIds });
+      if (!nonErpValidation.success) {
+        return NextResponse.json({ error: nonErpValidation.error }, { status: 400 });
       }
 
       // Verify custom role exists

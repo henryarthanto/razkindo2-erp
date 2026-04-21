@@ -17,7 +17,7 @@ import { toCamelCase } from '@/lib/supabase-helpers';
  * Verifies that the request is from an authenticated, active user.
  * Returns userId on success, or null on failure.
  */
-async function requireAuth(request: NextRequest): Promise<string | null> {
+export async function requireAuth(request: NextRequest): Promise<string | null> {
   return verifyAuthUser(request.headers.get('authorization'));
 }
 

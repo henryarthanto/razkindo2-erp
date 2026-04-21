@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/supabase';
-import { toCamelCase, rowsToCamelCase, createLog, createEvent } from '@/lib/supabase-helpers';
+import { toCamelCase, rowsToCamelCase, createLog, createEvent, generateId } from '@/lib/supabase-helpers';
 import { verifyAuthUser } from '@/lib/token';
 import { enforceSuperAdmin } from '@/lib/require-auth';
 import { wsStockUpdate } from '@/lib/ws-dispatch';
@@ -82,7 +82,7 @@ export async function POST(
         const { data: rpcResult, error: rpcError } = await db.rpc('increment_stock_with_hpp', {
           p_product_id: id,
           p_qty: quantityInSubUnits,
-          p_cost_per_unit: hpp || 0
+          p_new_hpp: hpp || 0
         });
         if (rpcError) throw new Error('Gagal update stok: ' + rpcError.message);
 
@@ -147,12 +147,29 @@ export async function POST(
       if (!freshProduct) throw new Error('Produk tidak ditemukan');
 
       if (type === 'in') {
-        // Use atomic RPC for unit stock increment
-        const { data: newStock } = await db.rpc('increment_unit_stock', {
-          p_unit_id: unitId,
-          p_product_id: id,
-          p_qty: quantityInSubUnits
-        });
+        // Find or create unit_product record first
+        const { data: unitProductRecord } = await db
+          .from('unit_products')
+          .select('id')
+          .eq('unit_id', unitId)
+          .eq('product_id', id)
+          .maybeSingle();
+
+        if (!unitProductRecord) {
+          // Create record if not exists
+          await db.from('unit_products').insert({
+            id: generateId(),
+            unit_id: unitId,
+            product_id: id,
+            stock: quantityInSubUnits
+          });
+        } else {
+          // Use atomic RPC for unit stock increment
+          await db.rpc('increment_unit_stock', {
+            p_unit_product_id: unitProductRecord.id,
+            p_qty: quantityInSubUnits
+          });
+        }
         // Recalculate global stock atomically using RPC
         await db.rpc('recalc_global_stock', { p_product_id: id });
         const { data: updatedProduct } = await db.from('products').select('global_stock, avg_hpp').eq('id', id).single();
@@ -161,12 +178,14 @@ export async function POST(
 
         createLog(db, {
           type: 'activity', action: 'stock_updated_per_unit', entity: 'product', entityId: id,
-          payload: JSON.stringify({ quantity, quantityInSubUnits, stockUnitType, type, unitId, stockType: 'per_unit', newStock, newGlobalStock })
+          payload: JSON.stringify({ quantity, quantityInSubUnits, stockUnitType, type, unitId, stockType: 'per_unit', newGlobalStock })
         });
 
         const { data: unit } = await db.from('units').select('*').eq('id', unitId).single();
         wsStockUpdate({ productId: id, productName: freshProduct.name || productCamel.name, unitId });
-        return NextResponse.json({ product: { ...productCamel, globalStock: newGlobalStock, avgHpp: newAvgHpp }, unitProduct: { stock: Number(newStock) || 0, unit: toCamelCase(unit) } });
+        // Get actual unit stock after update
+        const { data: unitProductAfter } = await db.from('unit_products').select('stock').eq('unit_id', unitId).eq('product_id', id).maybeSingle();
+        return NextResponse.json({ product: { ...productCamel, globalStock: newGlobalStock, avgHpp: newAvgHpp }, unitProduct: { stock: Number(unitProductAfter?.stock) || 0, unit: toCamelCase(unit) } });
       } else {
         // Use atomic RPC for unit stock decrement
         const { data: existingUnitProduct } = await db.from('unit_products').select('*').eq('unit_id', unitId).eq('product_id', id).maybeSingle();

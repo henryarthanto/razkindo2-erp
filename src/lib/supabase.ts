@@ -429,27 +429,76 @@ const rpcHandlers: Record<string, RpcFunction> = {
 
   // ── Courier handover ──
   async process_courier_handover(params) {
-    const { p_handover_id, p_status, p_processed_by_id } = params;
+    const { p_courier_id, p_unit_id, p_amount, p_processed_by_id, p_notes } = params;
     try {
-      const handover = await prisma.courierHandover.findUnique({
-        where: { id: p_handover_id },
-        include: { courierCash: true },
+      // 1. Get courier cash record
+      const courierCash = await prisma.courierCash.findUnique({
+        where: { courierId_unitId: { courierId: p_courier_id, unitId: p_unit_id } },
       });
-
-      if (!handover) {
-        return { data: null, error: { message: 'Handover not found', code: 'PGRST116' } };
+      if (!courierCash) {
+        return { data: null, error: { message: 'Courier cash tidak ditemukan', code: 'PGRST116' } };
+      }
+      if ((courierCash.balance || 0) < p_amount) {
+        return { data: null, error: { message: 'Saldo cash tidak cukup untuk handover', code: 'PGRST116' } };
       }
 
-      const updated = await prisma.courierHandover.update({
-        where: { id: p_handover_id },
+      // 2. Deduct from courier cash
+      const updatedCash = await prisma.courierCash.update({
+        where: { id: courierCash.id },
         data: {
-          status: p_status,
-          processedById: p_processed_by_id,
-          processedAt: new Date(),
+          balance: { decrement: p_amount },
+          totalHandover: { increment: p_amount },
         },
       });
 
-      return { data: updated, error: null };
+      // 3. Find or create active cash box for unit
+      let cashBox = await prisma.cashBox.findFirst({
+        where: { unitId: p_unit_id, isActive: true },
+      });
+      if (!cashBox) {
+        cashBox = await prisma.cashBox.create({
+          data: { name: 'Brankas Kurir', unitId: p_unit_id, balance: 0, isActive: true },
+        });
+      }
+      await prisma.cashBox.update({
+        where: { id: cashBox.id },
+        data: { balance: { increment: p_amount } },
+      });
+
+      // 4. Create finance request
+      const financeRequest = await prisma.financeRequest.create({
+        data: {
+          type: 'courier_deposit',
+          requestById: p_courier_id,
+          unitId: p_unit_id,
+          amount: p_amount,
+          description: p_notes || 'Setor kas kurir ke brankas',
+          courierId: p_courier_id,
+          status: 'pending',
+        },
+      });
+
+      // 5. Create courier handover
+      const handover = await prisma.courierHandover.create({
+        data: {
+          courierCashId: courierCash.id,
+          amount: p_amount,
+          notes: p_notes,
+          status: 'pending',
+          financeRequestId: financeRequest.id,
+        },
+      });
+
+      return {
+        data: {
+          handover_id: handover.id,
+          finance_request_id: financeRequest.id,
+          cash_box_id: cashBox.id,
+          new_balance: updatedCash.balance,
+          cash_box_balance: (cashBox.balance || 0) + p_amount,
+        },
+        error: null,
+      };
     } catch (error: any) {
       return { data: null, error: { message: error.message, code: 'PGRST116' } };
     }

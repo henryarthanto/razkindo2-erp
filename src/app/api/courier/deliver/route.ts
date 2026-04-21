@@ -168,7 +168,7 @@ export async function PATCH(request: NextRequest) {
         const { data: newBalance, error: ccError } = await db.rpc('atomic_add_courier_cash', {
           p_courier_id: courierId,
           p_unit_id: cashUnitId,
-          p_amount: amount,
+          p_delta: amount,
         });
         if (!ccError) {
           ccNewBalance = Number(newBalance) || 0;

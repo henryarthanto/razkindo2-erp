@@ -37,6 +37,15 @@ export const authSchemas = {
     customRoleId: z.string().optional().transform(v => (!v || v.trim() === '') ? undefined : v),
   }),
 
+  /** POST /api/auth/register — non-ERP employee */
+  registerNonErp: z.object({
+    name: z.string().min(1, 'Nama wajib diisi'),
+    phone: z.string().optional(),
+    customRoleId: z.string().min(1, 'Custom role diperlukan'),
+    unitId: z.string().optional(),
+    unitIds: z.array(z.string()).optional(),
+  }),
+
   /** POST /api/auth/change-password */
   changePassword: z.object({
     currentPassword: z.string().min(1, 'Password lama diperlukan'),
@@ -45,12 +54,13 @@ export const authSchemas = {
 
   /** POST /api/auth/forgot-password */
   forgotPassword: z.object({
-    email: z.string().email('Format email tidak valid'),
+    phone: z.string().min(1, 'Nomor telepon diperlukan'),
   }),
 
   /** POST /api/auth/reset-password */
   resetPassword: z.object({
-    token: z.string().min(1, 'Token diperlukan'),
+    phone: z.string().min(1, 'Nomor telepon diperlukan'),
+    code: z.string().min(1, 'Kode pemulihan diperlukan'),
     newPassword: z.string().min(6, 'Password minimal 6 karakter'),
   }),
 } as const;
@@ -205,6 +215,7 @@ export const productSchemas = {
     avgHpp: z.number().min(0).optional().default(0),
     sellingPrice: z.number().min(0).optional().default(0),
     sellPricePerSubUnit: z.number().min(0).optional().default(0),
+    purchasePrice: z.number().min(0).optional().default(0),
     minStock: z.number().min(0).optional().default(0),
     stockType: z.enum(['centralized', 'per_unit']).optional().default('centralized'),
     imageUrl: z.string().nullable().optional(),

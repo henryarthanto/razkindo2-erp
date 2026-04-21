@@ -114,7 +114,7 @@ export async function GET(request: NextRequest) {
         courier:users!courier_id(*),
         customer:customers(*),
         supplier:suppliers(*),
-        items:transaction_items(*, product:products(unit, subUnit)),
+        items:transaction_items(*, product:products(unit, sub_unit, conversion_rate)),
         payments:payments(*, received_by:users!received_by_id(*))
       `);
 
@@ -493,7 +493,7 @@ export async function POST(request: NextRequest) {
             })
             .select(`
               *,
-              items:transaction_items(*, product:products(unit, subUnit)),
+              items:transaction_items(*, product:products(unit, sub_unit, conversion_rate)),
               unit:units(*),
               created_by:users!created_by_id(*),
               customer:customers(*)
@@ -885,7 +885,7 @@ export async function POST(request: NextRequest) {
           .from('transactions')
           .select(`
             *,
-            items:transaction_items(*, product:products(unit, subUnit)),
+            items:transaction_items(*, product:products(unit, sub_unit, conversion_rate)),
             unit:units(*),
             created_by:users!created_by_id(*),
             customer:customers(*)
@@ -960,7 +960,6 @@ export async function POST(request: NextRequest) {
     wsTransactionUpdate({ invoiceNo: transaction.invoiceNo, type: transaction.type, status: transaction.status, unitId: transaction.unitId });
     wsStockUpdate({ unitId: transaction.unitId });
 
-    txTimer.stop();
     perfMonitor.incrementCounter('transactions.create_success');
 
     // Log idempotency key after successful transaction creation

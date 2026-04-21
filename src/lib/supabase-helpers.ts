@@ -19,9 +19,14 @@ export function snakeToCamel(str: string): string {
 /**
  * Convert all keys in an object from snake_case to camelCase
  * Recursively handles nested objects and arrays
+ *
+ * Returns null when input is null (instead of empty object).
+ * For non-null input, returns the camelCase-mapped object.
  */
-export function toCamelCase<T = Record<string, any>>(row: Record<string, any> | null): T {
-  if (!row) return {} as T;
+export function toCamelCase<T = Record<string, any>>(row: Record<string, any>): T;
+export function toCamelCase<T = Record<string, any>>(row: Record<string, any> | null): T | null;
+export function toCamelCase<T = Record<string, any>>(row: Record<string, any> | null): T | null {
+  if (!row) return null;
   const result: Record<string, any> = {};
   for (const [key, value] of Object.entries(row)) {
     const camelKey = snakeToCamel(key);
