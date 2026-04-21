@@ -64,7 +64,7 @@ export async function PATCH(
       try {
         await db.rpc('atomic_add_cashback', {
           p_customer_id: withdrawal.customer_id,
-          p_amount: refundAmount,
+          p_delta: refundAmount,
         });
       } catch {
         // RPC may not exist — fallback to direct update

@@ -987,7 +987,8 @@ export async function POST(request: NextRequest) {
       }
     }
   } catch (error) {
-    txTimer.stop();
+    // Note: txTimer.stop() is already called in the finally block above,
+    // no need to call it again here (was causing double-stop bug)
     perfMonitor.incrementCounter('transactions.create_failed');
     console.error('Create transaction error:', error);
     const message = error instanceof Error ? error.message : 'Terjadi kesalahan server';

@@ -23,9 +23,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ totalWithCouriers, totalCollected, totalHandedOver });
     }
     return NextResponse.json({
-      totalWithCouriers: totalsData?.totalBalance || 0,
-      totalCollected: totalsData?.totalCollected || 0,
-      totalHandedOver: totalsData?.totalHandover || 0,
+      totalWithCouriers: totalsData?.total_balance || 0,
+      totalCollected: totalsData?.total_collected || 0,
+      totalHandedOver: totalsData?.total_handover || 0,
     });
   } catch (error) {
     console.error('Courier cash summary error:', error);

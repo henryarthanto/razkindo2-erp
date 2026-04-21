@@ -23,8 +23,8 @@ export async function GET(request: NextRequest) {
 
     // OPTIMIZATION: Use RPC instead of full table scan on payments table
     const { data: sumsData, error: sumsError } = await db.rpc('get_payment_pool_sums');
-    let actualHppSum = sumsData?.hppPaidTotal || 0;
-    let actualProfitSum = sumsData?.profitPaidTotal || 0;
+    let actualHppSum = sumsData?.hpp_paid || 0;
+    let actualProfitSum = sumsData?.profit_paid || 0;
     if (sumsError) {
       console.error('[POOL] RPC get_payment_pool_sums failed, falling back to direct query:', sumsError.message);
       // Fallback: direct aggregate query (still better than full scan)
@@ -250,8 +250,8 @@ export async function POST(request: NextRequest) {
     if (action === 'sync_from_payments') {
       // OPTIMIZATION: Use RPC instead of full table scan on payments table
       const { data: sumsData, error: sumsError } = await db.rpc('get_payment_pool_sums');
-      let newHpp = sumsData?.hppPaidTotal || 0;
-      let newProfit = sumsData?.profitPaidTotal || 0;
+      let newHpp = sumsData?.hpp_paid || 0;
+      let newProfit = sumsData?.profit_paid || 0;
       if (sumsError) {
         console.error('[POOL SYNC] RPC failed, falling back to direct query:', sumsError.message);
         const { data: fallback } = await db.from('payments').select('hpp_portion, profit_portion');

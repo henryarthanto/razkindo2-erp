@@ -275,7 +275,7 @@ export async function POST(request: NextRequest) {
             const { data: newBalance, error: ccError } = await db.rpc('atomic_add_courier_cash', {
               p_courier_id: txCamel.courierId,
               p_unit_id: courierUnitId,
-              p_amount: remainingToCollect,
+              p_delta: remainingToCollect,
             });
             if (ccError) {
               console.error('[MARK_LUNAS] Failed to add courier cash (non-blocking):', ccError.message);
@@ -357,7 +357,7 @@ export async function POST(request: NextRequest) {
           // Use RPC for atomic balance update (prevents race condition on concurrent mark-lunas)
           const { error: rpcError } = await db.rpc('atomic_add_cashback', {
             p_customer_id: customer.id,
-            p_amount: cbAmount,
+            p_delta: cbAmount,
           });
           if (rpcError) {
             console.error('[MARK_LUNAS] atomic_add_cashback RPC failed:', rpcError.message);

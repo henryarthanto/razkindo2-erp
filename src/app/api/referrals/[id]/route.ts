@@ -97,7 +97,7 @@ export async function PATCH(
             // Use atomic RPC for race-safe cashback credit
             const { data: rpcResult, error: rpcError } = await db.rpc('atomic_add_cashback', {
               p_customer_id: referral.customer_id,
-              p_amount: bonusAmount,
+              p_delta: bonusAmount,
             });
 
             if (rpcError) {

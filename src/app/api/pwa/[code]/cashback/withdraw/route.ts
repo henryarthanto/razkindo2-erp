@@ -69,7 +69,7 @@ export async function POST(
     try {
       const { error: rpcError } = await db.rpc('atomic_deduct_cashback', {
         p_customer_id: customer.id,
-        p_amount: data.amount,
+        p_delta: data.amount,
       });
       if (rpcError) {
         // RPC may not exist — fallback to read-then-write

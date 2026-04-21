@@ -103,7 +103,7 @@ const rpcHandlers: Record<string, RpcFunction> = {
           avgHpp: newAvgHpp,
         },
       });
-      return { data: null, error: null };
+      return { data: { new_stock: newGlobalStock, new_avg_hpp: newAvgHpp }, error: null };
     } catch (error: any) {
       return { data: null, error: { message: error.message, code: 'PGRST116' } };
     }
