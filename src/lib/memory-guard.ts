@@ -109,8 +109,17 @@ export class MemoryGuard {
 
   /**
    * Suggest cleanup — call all registered cleanup callbacks.
+   * Also drains idle connection pools to free memory.
    */
   suggestCleanup(): void {
+    // Drain idle connections from pool to free memory
+    try {
+      import('@/lib/connection-pool').then(({ closeAllPools }) => {
+        closeAllPools().catch(() => {});
+        console.log('[MemoryGuard] Drained connection pools to free memory');
+      }).catch(() => {});
+    } catch { /* ignore if module not available */ }
+
     for (const cb of this.criticalCallbacks) {
       try { cb(); } catch { /* silent */ }
     }

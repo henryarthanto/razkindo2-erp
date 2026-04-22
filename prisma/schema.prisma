@@ -137,6 +137,9 @@ model Product {
   unitProducts UnitProduct[]
   transactionItems TransactionItem[]
   
+  @@index([category])
+  @@index([trackStock, isActive])
+  @@index([isActive, stockType])
   @@map("products")
 }
 
@@ -371,7 +374,9 @@ model TransactionItem {
   transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
   product       Product    @relation(fields: [productId], references: [id])
   
+  @@index([transactionId])
   @@index([productId])
+  @@index([transactionId, productId])
   @@map("transaction_items")
 }
 

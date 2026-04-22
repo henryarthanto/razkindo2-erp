@@ -1000,6 +1000,11 @@ const io = new Server(httpServer, {
   path: '/',
   pingTimeout: 60000,
   pingInterval: 25000,
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST'],
+  },
+  allowEIO3: true,
 });
 
 // ---------------------------------------------------------------------------

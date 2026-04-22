@@ -39,11 +39,21 @@ function getOrCreateSocket(): Socket {
     path: '/',
     transports: ['websocket', 'polling'],
     reconnection: true,
-    reconnectionAttempts: 20,
-    reconnectionDelay: 1000,
+    reconnectionAttempts: 10,
+    reconnectionDelay: 2000,
     reconnectionDelayMax: 10000,
     timeout: 20000,
     autoConnect: true,
+  });
+
+  // Graceful fallback: stop reconnecting after max attempts exhausted
+  _socket.on('reconnect_failed', () => {
+    console.warn(
+      '[WS] Max reconnection attempts reached. WebSocket service may be unavailable on this deployment.',
+    );
+    console.info(
+      '[WS] Real-time features are disabled. You can refresh the page to retry.',
+    );
   });
 
   // Global connection logging — re-auth on reconnect
@@ -65,6 +75,14 @@ function getOrCreateSocket(): Socket {
 
   _socket.on('connect_error', (err) => {
     console.warn('[WS] Connection error:', err.message);
+    // If we've exhausted reconnection attempts, disable further attempts
+    if (_socket && !_socket.connected) {
+      const activeReconnect = _socket.io?.opts?.reconnection;
+      if (activeReconnect && _socket.io?.engine?.reconnectAttemptsRemaining === 0) {
+        console.warn('[WS] Connection failed after max retries. Disabling reconnection.');
+        _socket.io.opts.reconnection = false;
+      }
+    }
   });
 
   return _socket;
