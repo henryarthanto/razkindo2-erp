@@ -36,6 +36,11 @@ import {
   Filter,
   ChevronLeft,
   ChevronRight as ChevronRightIcon,
+  Cpu,
+  MemoryStick,
+  Thermometer,
+  Clock,
+  Activity,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -61,6 +66,19 @@ const DATA_TABLES = [
 
 export default function StorageTab({ queryClient }: { queryClient: QueryClient }) {
   const { user } = useAuthStore();
+
+  // System stats (CPU, RAM) - refresh every 5 seconds for real-time monitoring
+  const { data: systemData, isLoading: systemLoading, refetch: refetchSystem } = useQuery({
+    queryKey: ['system-stats'],
+    queryFn: async () => {
+      const json = await apiFetch<{ success: boolean; data: any; error?: string }>('/api/system-stats');
+      if (!json.success) throw new Error(json.error);
+      return json.data;
+    },
+    refetchInterval: 5000,
+    retry: 1,
+    staleTime: 3_000,
+  });
 
   const { data: storageData, isLoading: storageLoading, isError: storageError, refetch: refetchStorage } = useQuery({
     queryKey: ['storage-info'],
@@ -378,85 +396,297 @@ export default function StorageTab({ queryClient }: { queryClient: QueryClient }
   };
 
   // Don't block the whole page with loading - show sections independently
-  if (storageLoading) {
-    return <LoadingFallback message="Memuat info storage..." />;
+  if (storageLoading && systemLoading) {
+    return <LoadingFallback message="Memuat info sistem..." />;
   }
 
-  if (storageError && !storageData) {
+  if (storageError && !storageData && !systemData) {
     return (
       <div className="flex flex-col items-center justify-center py-12 gap-3">
         <AlertTriangle className="w-8 h-8 text-amber-500" />
-        <p className="text-sm text-muted-foreground">Gagal memuat info storage</p>
-        <Button variant="outline" size="sm" onClick={() => refetchStorage()}>
+        <p className="text-sm text-muted-foreground">Gagal memuat info sistem</p>
+        <Button variant="outline" size="sm" onClick={() => { refetchStorage(); refetchSystem(); }}>
           <RefreshCw className="w-3 h-3 mr-1" /> Coba Lagi
         </Button>
       </div>
     );
   }
 
+  // System stats data
+  const sysRam = systemData?.ram;
+  const sysCpu = systemData?.cpu;
+  const sysDisk = systemData?.disk;
+
+  const formatBytes = (bytes: number) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const formatUptime = (seconds: number) => {
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    if (days > 0) return `${days}h ${hours}j ${mins}m`;
+    if (hours > 0) return `${hours}j ${mins}m`;
+    return `${mins}m`;
+  };
+
+  // Use system stats disk if available, fallback to storage API disk
+  const displayDisk = sysDisk || disk;
+
   return (
     <div className="space-y-4">
-      {/* Server Storage Overview */}
+      {/* Real-time Server Monitor */}
       <Card className="border-emerald-500/30">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Server className="w-4 h-4 text-emerald-500" />
-            Storage Server Z.ai
-          </CardTitle>
-          <CardDescription>Informasi penggunaan storage pada server</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Activity className="w-4 h-4 text-emerald-500" />
+                Monitor Server STB
+                <span className="inline-flex items-center gap-1 text-xs font-normal text-muted-foreground">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Live
+                </span>
+              </CardTitle>
+              <CardDescription>Monitoring CPU & RAM real-time pada STB</CardDescription>
+            </div>
+            <Button variant="outline" size="sm" className="shrink-0 h-7" onClick={() => refetchSystem()}>
+              <RefreshCw className="w-3 h-3" />
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {disk ? (
-            <>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium">Penggunaan Disk</span>
-                  <span className={cn(
-                    "font-bold text-lg",
-                    disk.percent > 80 ? "text-red-500" : disk.percent > 60 ? "text-amber-500" : "text-emerald-500"
-                  )}>
-                    {disk.percent}%
-                  </span>
+          {/* CPU Section */}
+          {sysCpu ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-md bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                  <Cpu className="w-4 h-4 text-blue-600" />
                 </div>
-                <div className="w-full h-4 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className={cn(
-                      "h-full rounded-full transition-all duration-500",
-                      disk.percent > 80 ? "bg-red-500" : disk.percent > 60 ? "bg-amber-500" : "bg-emerald-500"
-                    )}
-                    style={{ width: `${Math.min(disk.percent, 100)}%` }}
-                  />
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <p className="font-medium text-sm">CPU</p>
+                    <span className={cn(
+                      "font-bold text-lg",
+                      sysCpu.usagePercent > 80 ? "text-red-500" : sysCpu.usagePercent > 60 ? "text-amber-500" : "text-blue-500"
+                    )}>
+                      {sysCpu.usagePercent}%
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate">{sysCpu.modelName} • {sysCpu.cores} core</p>
                 </div>
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>Terpakai: {disk.usedFormatted}</span>
-                  <span>Tersedia: {disk.availableFormatted}</span>
-                  <span>Total: {disk.totalFormatted}</span>
+              </div>
+              <div className="w-full h-3 bg-muted rounded-full overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all duration-500",
+                    sysCpu.usagePercent > 80 ? "bg-red-500" : sysCpu.usagePercent > 60 ? "bg-amber-500" : "bg-blue-500"
+                  )}
+                  style={{ width: `${Math.min(sysCpu.usagePercent, 100)}%` }}
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {sysCpu.loadAvg && (
+                  <>
+                    <div className="p-2 rounded-lg bg-muted/50 border text-center">
+                      <p className="text-[10px] text-muted-foreground">1 min</p>
+                      <p className="font-bold text-sm">{sysCpu.loadAvg['1min'].toFixed(2)}</p>
+                    </div>
+                    <div className="p-2 rounded-lg bg-muted/50 border text-center">
+                      <p className="text-[10px] text-muted-foreground">5 min</p>
+                      <p className="font-bold text-sm">{sysCpu.loadAvg['5min'].toFixed(2)}</p>
+                    </div>
+                    <div className="p-2 rounded-lg bg-muted/50 border text-center">
+                      <p className="text-[10px] text-muted-foreground">15 min</p>
+                      <p className="font-bold text-sm">{sysCpu.loadAvg['15min'].toFixed(2)}</p>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-2 text-muted-foreground">
+              <Cpu className="w-6 h-6 mx-auto mb-1 opacity-30" />
+              <p className="text-xs">Info CPU tidak tersedia</p>
+            </div>
+          )}
+
+          <div className="border-t" />
+
+          {/* RAM Section */}
+          {sysRam ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-md bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+                  <MemoryStick className="w-4 h-4 text-violet-600" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <p className="font-medium text-sm">RAM</p>
+                    <span className={cn(
+                      "font-bold text-lg",
+                      sysRam.percent > 80 ? "text-red-500" : sysRam.percent > 60 ? "text-amber-500" : "text-violet-500"
+                    )}>
+                      {sysRam.percent}%
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {formatBytes(sysRam.used)} / {formatBytes(sysRam.total)}
+                  </p>
+                </div>
+              </div>
+              <div className="w-full h-3 bg-muted rounded-full overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all duration-500",
+                    sysRam.percent > 80 ? "bg-red-500" : sysRam.percent > 60 ? "bg-amber-500" : "bg-violet-500"
+                  )}
+                  style={{ width: `${Math.min(sysRam.percent, 100)}%` }}
+                />
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="p-2 rounded-lg bg-muted/50 border text-center">
+                  <p className="text-[10px] text-muted-foreground">Total</p>
+                  <p className="font-bold text-sm">{formatBytes(sysRam.total)}</p>
+                </div>
+                <div className="p-2 rounded-lg bg-muted/50 border text-center">
+                  <p className="text-[10px] text-muted-foreground">Terpakai</p>
+                  <p className="font-bold text-sm text-amber-500">{formatBytes(sysRam.used)}</p>
+                </div>
+                <div className="p-2 rounded-lg bg-muted/50 border text-center">
+                  <p className="text-[10px] text-muted-foreground">Tersedia</p>
+                  <p className="font-bold text-sm text-emerald-500">{formatBytes(sysRam.available)}</p>
+                </div>
+                <div className="p-2 rounded-lg bg-muted/50 border text-center">
+                  <p className="text-[10px] text-muted-foreground">Cache</p>
+                  <p className="font-bold text-sm">{formatBytes(sysRam.cached + sysRam.buffers)}</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-3 rounded-lg bg-muted/50 border">
-                  <p className="text-xs text-muted-foreground">Total Disk</p>
-                  <p className="font-bold text-lg">{disk.totalFormatted}</p>
+              {/* Swap */}
+              {sysRam.swapTotal > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <HardDrive className="w-3 h-3" /> Swap
+                    </span>
+                    <span className={cn(
+                      "font-semibold text-sm",
+                      sysRam.swapPercent > 80 ? "text-red-500" : sysRam.swapPercent > 60 ? "text-amber-500" : "text-muted-foreground"
+                    )}>
+                      {formatBytes(sysRam.swapUsed)} / {formatBytes(sysRam.swapTotal)} ({sysRam.swapPercent}%)
+                    </span>
+                  </div>
+                  <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={cn(
+                        "h-full rounded-full transition-all duration-500",
+                        sysRam.swapPercent > 80 ? "bg-red-400" : sysRam.swapPercent > 60 ? "bg-amber-400" : "bg-muted-foreground/30"
+                      )}
+                      style={{ width: `${Math.min(sysRam.swapPercent, 100)}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="p-3 rounded-lg bg-muted/50 border">
-                  <p className="text-xs text-muted-foreground">Terpakai</p>
-                  <p className="font-bold text-lg text-amber-500">{disk.usedFormatted}</p>
-                </div>
-                <div className="p-3 rounded-lg bg-muted/50 border">
-                  <p className="text-xs text-muted-foreground">Tersedia</p>
-                  <p className="font-bold text-lg text-emerald-500">{disk.availableFormatted}</p>
-                </div>
-                <div className="p-3 rounded-lg bg-muted/50 border">
-                  <p className="text-xs text-muted-foreground">Ukuran Proyek</p>
-                  <p className="font-bold text-lg">{project?.totalFormatted || '0 B'}</p>
-                </div>
-              </div>
-            </>
+              )}
+            </div>
           ) : (
-            <div className="text-center py-4 text-muted-foreground">
-              <HardDrive className="w-8 h-8 mx-auto mb-2 opacity-30" />
-              <p className="text-sm">Tidak dapat membaca info disk</p>
+            <div className="text-center py-2 text-muted-foreground">
+              <MemoryStick className="w-6 h-6 mx-auto mb-1 opacity-30" />
+              <p className="text-xs">Info RAM tidak tersedia</p>
+            </div>
+          )}
+
+          <div className="border-t" />
+
+          {/* Disk + Extra Info */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {displayDisk ? (
+              <div className="p-3 rounded-lg border space-y-2">
+                <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                  <HardDrive className="w-3 h-3" /> Penyimpanan Disk
+                </p>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">{formatBytes(displayDisk.used)} / {formatBytes(displayDisk.total)}</span>
+                  <span className={cn(
+                    "font-bold",
+                    displayDisk.percent > 80 ? "text-red-500" : displayDisk.percent > 60 ? "text-amber-500" : "text-emerald-500"
+                  )}>
+                    {displayDisk.percent}%
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-all duration-500",
+                      displayDisk.percent > 80 ? "bg-red-500" : displayDisk.percent > 60 ? "bg-amber-500" : "bg-emerald-500"
+                    )}
+                    style={{ width: `${Math.min(displayDisk.percent, 100)}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">Tersisa: {formatBytes(displayDisk.available)}</p>
+              </div>
+            ) : (
+              <div className="p-3 rounded-lg border flex items-center justify-center text-muted-foreground text-xs">
+                Info disk tidak tersedia
+              </div>
+            )}
+
+            <div className="space-y-2">
+              {sysCpu?.temp != null && (
+                <div className="p-2.5 rounded-lg border flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Thermometer className="w-3 h-3" /> Suhu CPU
+                  </span>
+                  <span className={cn(
+                    "font-bold text-sm",
+                    sysCpu.temp > 75 ? "text-red-500" : sysCpu.temp > 60 ? "text-amber-500" : "text-emerald-500"
+                  )}>
+                    {sysCpu.temp.toFixed(1)}°C
+                  </span>
+                </div>
+              )}
+              {sysCpu?.uptimeSeconds != null && sysCpu.uptimeSeconds > 0 && (
+                <div className="p-2.5 rounded-lg border flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Clock className="w-3 h-3" /> Uptime
+                  </span>
+                  <span className="font-bold text-sm">
+                    {formatUptime(sysCpu.uptimeSeconds)}
+                  </span>
+                </div>
+              )}
+              {project && (
+                <div className="p-2.5 rounded-lg border flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Server className="w-3 h-3" /> Ukuran Proyek
+                  </span>
+                  <span className="font-bold text-sm">{project.totalFormatted || '0 B'}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Warning if RAM > 80% */}
+          {sysRam && sysRam.percent > 80 && (
+            <div className="flex items-start gap-2 p-2.5 bg-red-50 border border-red-200 rounded-lg text-xs dark:bg-red-950/20 dark:border-red-800">
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-red-500" />
+              <div>
+                <p className="font-medium text-red-700 dark:text-red-400">RAM hampir penuh!</p>
+                <p className="text-red-600 dark:text-red-500">Pertimbangkan untuk membersihkan data atau restart server.</p>
+              </div>
+            </div>
+          )}
+          {sysCpu && sysCpu.temp != null && sysCpu.temp > 75 && (
+            <div className="flex items-start gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs dark:bg-amber-950/20 dark:border-amber-800">
+              <Thermometer className="w-4 h-4 mt-0.5 shrink-0 text-amber-500" />
+              <div>
+                <p className="font-medium text-amber-700 dark:text-amber-400">Suhu CPU tinggi!</p>
+                <p className="text-amber-600 dark:text-amber-500">Pastikan ventilasi STB baik dan tidak terlalu panas.</p>
+              </div>
             </div>
           )}
         </CardContent>

@@ -31,6 +31,7 @@ import {
   UploadCloud,
  RefreshCw,
  ShieldCheck,
+ Activity,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -451,7 +452,7 @@ export default function SettingsModule() {
                 <span className="inline-flex items-center gap-2"><MessageSquare className="w-4 h-4" /><span>WhatsApp</span></span>
               </SelectItem>
               <SelectItem value="storage">
-                <span className="inline-flex items-center gap-2"><HardDrive className="w-4 h-4" /><span>Storage</span></span>
+                <span className="inline-flex items-center gap-2"><Activity className="w-4 h-4" /><span>Monitor</span></span>
               </SelectItem>
               <SelectItem value="system">
                 <span className="inline-flex items-center gap-2"><Database className="w-4 h-4" /><span>Sistem</span></span>
@@ -466,7 +467,7 @@ export default function SettingsModule() {
           <TabsTrigger value="units" className="shrink-0 whitespace-nowrap text-xs sm:text-sm gap-1"><Building2 className="w-3 h-3 sm:w-4 sm:h-4" />Unit</TabsTrigger>
           <TabsTrigger value="printer" className="shrink-0 whitespace-nowrap text-xs sm:text-sm gap-1"><Printer className="w-3 h-3 sm:w-4 sm:h-4" />Printer</TabsTrigger>
           <TabsTrigger value="whatsapp" className="shrink-0 whitespace-nowrap text-xs sm:text-sm gap-1"><MessageSquare className="w-3 h-3 sm:w-4 sm:h-4" />WA</TabsTrigger>
-          <TabsTrigger value="storage" className="shrink-0 whitespace-nowrap text-xs sm:text-sm gap-1"><HardDrive className="w-3 h-3 sm:w-4 sm:h-4" />Storage</TabsTrigger>
+          <TabsTrigger value="storage" className="shrink-0 whitespace-nowrap text-xs sm:text-sm gap-1"><Activity className="w-3 h-3 sm:w-4 sm:h-4" />Monitor</TabsTrigger>
           <TabsTrigger value="system" className="shrink-0 whitespace-nowrap text-xs sm:text-sm gap-1"><Database className="w-3 h-3 sm:w-4 sm:h-4" />Sistem</TabsTrigger>
         </TabsList>
         
