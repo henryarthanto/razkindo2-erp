@@ -19,9 +19,9 @@ model CustomRole {
   id          String   @id @default(cuid())
   name        String   @unique  // e.g., "OB", "Sopir", "Security", "Driver"
   description String?
-  createdById String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdById String   @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
   
   createdBy   User     @relation("CustomRoleCreator", fields: [createdById], references: [id])
   users       User[]
@@ -119,8 +119,8 @@ model Product {
   description         String?
   category            String?
   unit                String?  // kg, pcs, box (main unit)
-  subUnit             String?  // pack, pcs, etc (sub unit within main unit)
-  conversionRate      Float    @default(1)  // how many subUnits per 1 main unit (e.g., 10 means 1 box = 10 pack)
+  subUnit             String?  @map("sub_unit") // pack, pcs, etc (sub unit within main unit)
+  conversionRate      Float    @default(1) @map("conversion_rate")  // how many subUnits per 1 main unit (e.g., 10 means 1 box = 10 pack)
   globalStock         Float    @default(0) @map("global_stock") // stored in smallest unit (subUnit)
   avgHpp              Float    @default(0) @map("avg_hpp") // Cost price (HPP) per subUnit
   sellingPrice        Float    @default(0) @map("selling_price") // Selling price per main unit
@@ -388,7 +388,7 @@ model Payment {
   transactionId String   @map("transaction_id")
   receivedById  String   @map("received_by_id")
   amount        Float
-  paymentMethod String   // cash, transfer, giro
+  paymentMethod String   @map("payment_method") // cash, transfer, giro
   cashBoxId     String?  @map("cash_box_id")
   bankAccountId String?  @map("bank_account_id")
   bankName      String?  @map("bank_name")
