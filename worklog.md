@@ -50,3 +50,34 @@ Stage Summary:
 - Global error handlers added for production stack traces (fixes "ignore-listed frames" issue)
 - Deploy script created at scripts/deploy-stb-standalone.sh
 - User needs to: git pull on Mac → clean rebuild → re-transfer to STB
+
+---
+Task ID: 3
+Agent: Main
+Task: Fix all remaining bugs and prepare clean deployment
+
+Work Log:
+- Verified all 14 documented bugs (BUG 1-14) are already fixed in current codebase
+- BUG 1 (courier/deliver p_amount→p_delta): Already fixed - line 171 uses p_delta
+- BUG 2 (courier/handover RPC signature): Already fixed - handler accepts p_courier_id, p_unit_id, p_amount, p_processed_by_id, p_notes
+- BUG 3 (products/[id]/stock increment_unit_stock): Already fixed - looks up unit_product_id first
+- BUG 4 (finance/requests p_cost_per_unit→p_new_hpp): Already fixed - line 386 uses p_new_hpp
+- BUG 5 (products POST camelCase→snake_case): Already fixed - uses sub_unit, conversion_rate, purchase_price
+- BUG 6 (pwa/[code] cashback columns): Already fixed - fetches from cashback_config table
+- BUG 7 (toCamelCase null): Already fixed - returns null instead of {}
+- BUG 8 (txTimer.stop twice): Checked - only called in finally blocks
+- BUG 9 (subUnit in select): Already fixed - uses sub_unit, conversion_rate in select strings
+- BUG 10 (requireAuth export): Already exported
+- BUG 11 (purchasePrice): Already included in insert
+- BUG 12 (validators auth schemas): Already fixed - uses phone not email
+- BUG 13 (generateInvoiceNo shadow): Uses generateLocalInvoiceNo with different prefix
+- BUG 14 (register validation): registerNonErp schema already exists
+- Verified all RPC functions are handled locally via Prisma (supabase.ts)
+- Build successful, lint clean (1 minor warning only)
+- Root cause of "semuanya belum" is missing database tables in Supabase
+
+Stage Summary:
+- All 14 bugs confirmed fixed in code
+- Main deployment issue: database tables not synced (prisma db push needed on STB)
+- Build successful - ready for deployment
+- User needs to: run prisma db push on STB to create missing tables
