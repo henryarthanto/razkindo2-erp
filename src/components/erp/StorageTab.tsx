@@ -257,7 +257,6 @@ export default function StorageTab({ queryClient }: { queryClient: QueryClient }
 
   const disk = storageData?.disk;
   const project = storageData?.project;
-  const database = storageData?.database;
   const cleanable = storageData?.cleanable;
   const tableCounts = storageData?.database?.tableCounts;
 
