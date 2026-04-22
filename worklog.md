@@ -1,27 +1,31 @@
 ---
 Task ID: 1
-Agent: Main Agent
-Task: Comprehensive WebSocket, Supabase optimization, and bug audit for Razkindo ERP
+Agent: Main
+Task: Comprehensive WebSocket fix, Supabase optimization, and bug audit
 
 Work Log:
-- Explored entire codebase to understand WebSocket/Socket.io architecture
-- Identified WebSocket root cause: XTransformPort pattern requires Caddy gateway, not available on STB
-- Fixed use-websocket.ts: Auto-detect environment, fallback from XTransformPort to direct port 3004
-- Fixed event-queue/index.ts: Added NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY fallback for correct DB key
-- Optimized connection-pool.ts: Reduced pool sizes (tx: 20→10, session: 5→3), made configurable via env vars
-- Fixed auth-secret.ts: Multi-path search for standalone mode (cwd, ../, ../../, /DATA/AppData/razkindo2-erp/)
-- Created src/lib/paths.ts: Project path resolver for standalone mode compatibility
-- Fixed system route auth bugs (BUG-1,2,3,4): Added auth to /api/system/consistency, /api/system/queue-health, restricted /api/health, /api/system-stats
-- Fixed .single() → .maybeSingle() on key routes: token.ts, require-auth.ts, setup-schema
-- Fixed process.cwd() for standalone mode: setup-schema, payment proof upload, cleanup
-- Fixed busy-wait CPU measurement in system-stats: while loop → await setTimeout
-- Fixed unbounded user cache in token.ts: Added max size (1000) with LRU-like eviction
-- Payments route already had optimistic concurrency protection (.eq('paid_amount', expectedPaidAmount))
+- Investigated WebSocket/Socket.io architecture: event-queue service on port 3004, ws-dispatch.ts, use-websocket.ts
+- Audited 90+ Supabase queries for optimization opportunities
+- Found 26 bugs across all severity levels
+- Fixed WebSocket presence:update event (server never emitted it)
+- Removed hardcoded WS_SECRET fallback from ws-dispatch.ts and event-queue
+- Made event-queue URL configurable via EVENT_QUEUE_URL env var
+- Fixed NetworkStatusIndicator event listener memory leak
+- Removed NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY fallback (security risk)
+- Added authentication to migrate-user-units endpoint
+- Added authentication to AI chat DELETE endpoint
+- Fixed AUTH_SECRET to fail in production if not set
+- Fixed login rate limiter unbounded memory growth
+- Added missing Prisma indexes (debtId, receivableId, receivedById, paidAt, unitId, type, composite type+paymentStatus)
+- Fixed N+1 queries in transaction cancel route (batch-fetched unit_products)
+- Updated .env with WS_SECRET and EVENT_QUEUE_URL
+- Updated .env.example with new variables
+- Removed undocumented socket.io internal API usage in use-websocket.ts
+- Pushed Prisma schema to database
 
 Stage Summary:
-- 12 files modified with bug fixes and optimizations
-- WebSocket now auto-detects environment (XTransformPort vs direct port)
-- Database connection pool optimized for low-memory STB
-- Auth system hardened for standalone mode
-- Critical security fixes on system API routes
-- Code passes lint cleanly
+- WebSocket root cause: event-queue service not running + presence:update never emitted + hardcoded secrets
+- All 5 critical bugs fixed
+- 7 new Prisma indexes added for query optimization
+- N+1 query eliminated in transaction cancel route
+- Services verified working (Next.js on 3000, event-queue on 3004)

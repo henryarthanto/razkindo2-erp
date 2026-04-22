@@ -1,11 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/supabase';
+import { verifyAuthUser } from '@/lib/token';
 
 // =====================================================================
 // AUTO-MIGRATE: Create user_units junction table if it doesn't exist
+// Requires super_admin authentication
 // =====================================================================
 
-export async function POST() {
+async function checkAuth(request: NextRequest): Promise<NextResponse | null> {
+  const userId = await verifyAuthUser(request.headers.get('authorization'));
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  const { data: user, error } = await db.from('users').select('role, is_active, status').eq('id', userId).single();
+  if (error || !user || user.role !== 'super_admin' || !user.is_active || user.status !== 'approved') {
+    return NextResponse.json({ error: 'Forbidden — super admin only' }, { status: 403 });
+  }
+  return null;
+}
+
+export async function POST(request: NextRequest) {
+  const authError = await checkAuth(request);
+  if (authError) return authError;
+
   try {
     // Check if user_units table already exists
     const { error: checkError } = await db
@@ -27,7 +44,10 @@ export async function POST() {
 }
 
 // Check status
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authError = await checkAuth(request);
+  if (authError) return authError;
+
   try {
     const { error } = await db
       .from('user_units')

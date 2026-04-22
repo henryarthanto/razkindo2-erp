@@ -57,6 +57,20 @@ export async function POST(
         .in('id', allItemProductIds);
       const cancelProductLookup = new Map((cancelProductsBatch || []).map((p: any) => [p.id, p]));
 
+      // OPTIMIZATION: Batch-fetch all unit_products for this unit (eliminates N+1 per-item queries)
+      const perUnitProductIds = (cancelProductsBatch || [])
+        .filter((p: any) => p.stock_type === 'per_unit')
+        .map((p: any) => p.id);
+      let unitProductLookup = new Map<string, any>();
+      if (perUnitProductIds.length > 0) {
+        const { data: unitProductsBatch } = await db
+          .from('unit_products')
+          .select('*')
+          .eq('unit_id', txCamel.unitId)
+          .in('product_id', perUnitProductIds);
+        unitProductLookup = new Map((unitProductsBatch || []).map((up: any) => [up.product_id, up]));
+      }
+
       for (const item of (items || [])) {
         const itemCamel = toCamelCase(item);
         const stockQty = itemCamel.qtyInSubUnit ?? itemCamel.qty;
@@ -66,12 +80,7 @@ export async function POST(
           if (!product) continue;
           
           if (product.stock_type === 'per_unit') {
-            const { data: unitProduct } = await db
-              .from('unit_products')
-              .select('*')
-              .eq('unit_id', txCamel.unitId)
-              .eq('product_id', itemCamel.productId)
-              .maybeSingle();
+            const unitProduct = unitProductLookup.get(itemCamel.productId);
             
             if (unitProduct) {
               // Use atomic RPC for stock restoration
@@ -86,8 +95,7 @@ export async function POST(
                   .update({ stock: unitProduct.stock + stockQty })
                   .eq('id', unitProduct.id);
               }
-              // Recalculate global stock
-              await db.rpc('recalc_global_stock', { p_product_id: itemCamel.productId });
+              // Note: recalc_global_stock deferred to after the loop
             } else {
               const { error: rpcError } = await db.rpc('increment_stock', {
                 p_product_id: itemCamel.productId,
@@ -117,12 +125,7 @@ export async function POST(
           const product = cancelProductLookup.get(itemCamel.productId);
           if (product) {
             if (product.stock_type === 'per_unit') {
-              const { data: unitProduct } = await db
-                .from('unit_products')
-                .select('*')
-                .eq('unit_id', txCamel.unitId)
-                .eq('product_id', itemCamel.productId)
-                .maybeSingle();
+              const unitProduct = unitProductLookup.get(itemCamel.productId);
               if (unitProduct) {
                 await db
                   .from('unit_products')
@@ -169,6 +172,23 @@ export async function POST(
             }
           }
         }
+      }
+
+      // OPTIMIZATION: Batch recalc global stock for all per_unit products affected
+      // (deferred from the per-item loop above to avoid N+1 RPC calls)
+      if (perUnitProductIds.length > 0 && txCamel.type === 'sale') {
+        const affectedProductIds = [...new Set((items || [])
+          .map((i: any) => toCamelCase(i))
+          .filter((ic: any) => {
+            const p = cancelProductLookup.get(ic.productId);
+            return p && p.stock_type === 'per_unit';
+          })
+          .map((ic: any) => ic.productId))];
+        await Promise.all(affectedProductIds.map(pid =>
+          db.rpc('recalc_global_stock', { p_product_id: pid }).catch((err: any) =>
+            console.error('[CANCEL] recalc_global_stock failed for', pid, err.message)
+          )
+        ));
       }
 
       // Cancel linked receivable

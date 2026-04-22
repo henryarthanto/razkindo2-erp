@@ -148,7 +148,6 @@ function getSupabaseClient(): SupabaseClient | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   const key =
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!url || !key) {
@@ -402,6 +401,31 @@ function dequeueBatch(maxCount: number): QueuedEvent[] {
   }
 
   return batch;
+}
+
+// =====================================================================
+// Presence Broadcasting
+// =====================================================================
+
+/**
+ * Broadcast presence information to all connected clients.
+ * Emits 'presence:update' with the count of online users and their IDs.
+ * This fixes the bug where the client subscribed to 'presence:update'
+ * but the server never emitted it.
+ */
+function broadcastPresence(): void {
+  const onlineUserIds: string[] = [];
+  for (const user of connectedUsers.values()) {
+    if (user.userId) {
+      onlineUserIds.push(user.userId);
+    }
+  }
+  // Deduplicate user IDs (same user may have multiple socket connections)
+  const uniqueUserIds = [...new Set(onlineUserIds)];
+  io.emit('presence:update', {
+    onlineCount: uniqueUserIds.length,
+    onlineUserIds: uniqueUserIds,
+  });
 }
 
 // =====================================================================
@@ -673,7 +697,12 @@ function handleApiRequest(req: IncomingMessage, res: ServerResponse): boolean {
 
   // Auth check (shared secret)
   const authHeader = req.headers.authorization;
-  const wsSecret = process.env.WS_SECRET || 'razkindo-erp-ws-secret-2024';
+  const wsSecret = process.env.WS_SECRET;
+  if (!wsSecret) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'WS_SECRET not configured on server' }));
+    return true;
+  }
   if (authHeader !== `Bearer ${wsSecret}`) {
     res.writeHead(401, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Unauthorized' }));
@@ -1088,6 +1117,8 @@ io.on('connection', (socket) => {
       console.log(
         `[EventQueue] Registered: ${socket.id} (user: ${data.userId || 'anon'}, roles: ${data.roles?.join(',') || 'none'}, unit: ${data.unitId || 'none'})`,
       );
+      // Broadcast presence update to all connected clients
+      broadcastPresence();
     },
   );
 
@@ -1182,6 +1213,8 @@ io.on('connection', (socket) => {
     if (count <= 1) ipConnectionCount.delete(clientIp);
     else ipConnectionCount.set(clientIp, count - 1);
     console.log(`[EventQueue] Disconnected: ${socket.id} (${reason})`);
+    // Broadcast presence update to remaining clients
+    broadcastPresence();
   });
 
   socket.on('error', (err) => {

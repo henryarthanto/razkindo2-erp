@@ -355,6 +355,7 @@ model Transaction {
   @@index([paymentStatus])
   @@index([type, createdAt])
   @@index([transactionDate, unitId])
+  @@index([type, paymentStatus])
   @@map("transactions")
 }
 
@@ -406,6 +407,8 @@ model Payment {
   @@index([transactionId])
   @@index([cashBoxId])
   @@index([bankAccountId])
+  @@index([receivedById])
+  @@index([paidAt])
   @@map("payments")
 }
 
@@ -581,6 +584,7 @@ model FinanceRequest {
   @@index([status])
   @@index([type])
   @@index([courierId])
+  @@index([unitId])
   @@map("finance_requests")
 }
 
@@ -643,6 +647,7 @@ model CompanyDebt {
   
   @@index([status])
   @@index([isActive])
+  @@index([createdById])
   @@map("company_debts")
 }
 
@@ -664,6 +669,7 @@ model CompanyDebtPayment {
   
   debt           CompanyDebt @relation(fields: [debtId], references: [id], onDelete: Cascade)
   
+  @@index([debtId])
   @@map("company_debt_payments")
 }
 
@@ -729,6 +735,7 @@ model ReceivableFollowUp {
   
   receivable    Receivable @relation(fields: [receivableId], references: [id], onDelete: Cascade)
   
+  @@index([receivableId])
   @@map("receivable_follow_ups")
 }
 
@@ -880,6 +887,7 @@ model Event {
   
   @@index([createdAt])
   @@index([isRead])
+  @@index([type])
   @@map("events")
 }
 

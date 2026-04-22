@@ -28,14 +28,17 @@ interface WSEmitOptions {
  * // Notify users in a unit
  * await wsEmit({ event: 'erp:stock_update', data: payload, target: 'unit', targetId: unitId });
  */
+/** Event-queue service URL — configurable via env var */
+const EVENT_QUEUE_URL = process.env.EVENT_QUEUE_URL || 'http://127.0.0.1:3004';
+
 export async function wsEmit(options: WSEmitOptions): Promise<boolean> {
   try {
-    const wsSecret = process.env.WS_SECRET || 'razkindo-erp-ws-secret-2024';
+    const wsSecret = process.env.WS_SECRET;
     if (!wsSecret) {
       console.warn('[WS Dispatch] WS_SECRET not set, skipping emit');
       return false;
     }
-    const res = await fetch('http://127.0.0.1:3004/enqueue', {
+    const res = await fetch(`${EVENT_QUEUE_URL}/enqueue`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

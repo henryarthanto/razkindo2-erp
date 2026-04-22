@@ -21,11 +21,30 @@ const _loginAttempts = new Map<string, RateLimitEntry>();
 const MAX_ATTEMPTS = 10;           // Max login attempts per window
 const WINDOW_MS = 15 * 60 * 1000;  // 15 minute window
 const LOCKOUT_MS = 15 * 60 * 1000; // 15 minute lockout after max attempts
+const MAX_RATE_LIMIT_ENTRIES = 1000; // Prevent unbounded memory growth
+
+// Periodic cleanup to prevent memory leaks from abandoned entries
+let _lastCleanup = Date.now();
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // Clean every 5 minutes
 
 function cleanExpiredEntries() {
   const now = Date.now();
+  // Throttle cleanup to avoid running on every request
+  if (now - _lastCleanup < CLEANUP_INTERVAL_MS && _loginAttempts.size < MAX_RATE_LIMIT_ENTRIES) return;
+  _lastCleanup = now;
+
   for (const [key, entry] of _loginAttempts) {
     if (now > entry.firstAttemptAt + WINDOW_MS && now > entry.lockedUntil) {
+      _loginAttempts.delete(key);
+    }
+  }
+
+  // If still too large, evict oldest entries
+  if (_loginAttempts.size > MAX_RATE_LIMIT_ENTRIES) {
+    const entries = [..._loginAttempts.entries()]
+      .sort((a, b) => a[1].firstAttemptAt - b[1].firstAttemptAt);
+    const toDelete = entries.slice(0, entries.length - MAX_RATE_LIMIT_ENTRIES);
+    for (const [key] of toDelete) {
       _loginAttempts.delete(key);
     }
   }

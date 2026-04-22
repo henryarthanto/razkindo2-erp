@@ -63,15 +63,19 @@ export function NetworkStatusIndicator() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const updateOnline = () => setIsOnline(navigator.onLine);
-    updateOnline();
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
 
-    window.addEventListener('online', () => setIsOnline(true));
-    window.addEventListener('offline', () => setIsOnline(false));
+    // Set initial state based on navigator.onLine
+    // Use a microtask to avoid calling setState synchronously in the effect body
+    queueMicrotask(() => setIsOnline(navigator.onLine));
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
 
     return () => {
-      window.removeEventListener('online', () => setIsOnline(true));
-      window.removeEventListener('offline', () => setIsOnline(false));
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
     };
   }, []);
 

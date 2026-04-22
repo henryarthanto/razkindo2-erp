@@ -157,14 +157,6 @@ function createSocket(url: string, path: string): Socket {
 
   socket.on('connect_error', (err) => {
     console.warn('[WS] Connection error:', err.message);
-    // If we've exhausted reconnection attempts, disable further attempts
-    if (socket && !socket.connected) {
-      const activeReconnect = socket.io?.opts?.reconnection;
-      if (activeReconnect && (socket.io?.engine as any)?.reconnectAttemptsRemaining === 0) {
-        console.warn('[WS] Connection failed after max retries. Disabling reconnection.');
-        socket.io.opts.reconnection = false;
-      }
-    }
   });
 
   return socket;
