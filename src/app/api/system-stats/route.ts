@@ -2,13 +2,48 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuthUser } from '@/lib/token';
 import { execSync } from 'child_process';
 
+interface RamInfo {
+  total: number;
+  used: number;
+  available: number;
+  buffers: number;
+  cached: number;
+  percent: number;
+  swapTotal: number;
+  swapUsed: number;
+  swapFree: number;
+  swapPercent: number;
+}
+
+interface LoadAvg {
+  '1min': number;
+  '5min': number;
+  '15min': number;
+}
+
+interface CpuInfo {
+  usagePercent: number;
+  modelName: string;
+  cores: number;
+  loadAvg: LoadAvg | null;
+  temp: number | null;
+  uptimeSeconds: number;
+}
+
+interface DiskInfo {
+  total: number;
+  used: number;
+  available: number;
+  percent: number;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const authUserId = await verifyAuthUser(request.headers.get('authorization'));
     if (!authUserId) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
     // RAM info from /proc/meminfo (works on Linux)
-    let ram = null;
+    let ram: RamInfo | null = null;
     try {
       const meminfo = execSync('cat /proc/meminfo', { encoding: 'utf-8', timeout: 3000 });
       const parseLine = (key: string) => {
@@ -63,7 +98,7 @@ export async function GET(request: NextRequest) {
     }
 
     // CPU info
-    let cpu = null;
+    let cpu: CpuInfo | null = null;
     try {
       // CPU usage: read from /proc/stat twice with small interval
       const readCpuTimes = () => {
@@ -104,7 +139,7 @@ export async function GET(request: NextRequest) {
       } catch { cores = 1; }
 
       // Load average
-      let loadAvg = null;
+      let loadAvg: LoadAvg | null = null;
       try {
         const loadStr = execSync('cat /proc/loadavg', { encoding: 'utf-8', timeout: 3000 });
         const parts = loadStr.trim().split(/\s+/);
@@ -116,7 +151,7 @@ export async function GET(request: NextRequest) {
       } catch { /* empty */ }
 
       // CPU temperature
-      let temp = null;
+      let temp: number | null = null;
       try {
         const tempStr = execSync('cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null', { encoding: 'utf-8', timeout: 3000 });
         const tempVal = parseInt(tempStr.trim());
@@ -143,7 +178,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Disk info
-    let disk = null;
+    let disk: DiskInfo | null = null;
     try {
       const dfOutput = execSync("df -B1 / | tail -1", { encoding: 'utf-8', timeout: 3000 });
       const parts = dfOutput.trim().split(/\s+/);
