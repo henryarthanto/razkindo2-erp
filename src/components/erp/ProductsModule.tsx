@@ -982,7 +982,7 @@ export default function ProductsModule() {
               const isPerUnit = p.stockType === 'per_unit';
               const isTracking = p.trackStock !== false;
               const displayStock = isTracking
-                ? (selectedUnitId && isPerUnit ? (p.effectiveStock ?? p.unitStock ?? 0) : p.globalStock)
+                ? (isPerUnit ? (p.effectiveStock ?? p.unitStock ?? (p.unitProducts?.reduce?.((sum: number, up: any) => sum + (up.stock || 0), 0) ?? 0)) : p.globalStock)
                 : 0;
               const displayStockStr = isTracking ? formatStock(displayStock, p.unit, p.subUnit, p.conversionRate) : 'Tidak dilacak';
               const isLow = isTracking && displayStock <= p.minStock;

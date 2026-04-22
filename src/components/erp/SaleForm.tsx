@@ -251,21 +251,26 @@ export function SaleForm({
   const addToCart = useCallback((product: Product) => {
     // If trackStock is off, allow adding without stock check
     const isTracking = product.trackStock !== false;
-    if (isTracking && product.globalStock <= 0) { toast.error('Stok habis!'); return; }
+    // For per-unit products, use effectiveStock (from API with unitId filter);
+    // fallback to summing unitProducts stocks if effectiveStock not available
+    const effectiveStock = product.stockType === 'per_unit'
+      ? (product.effectiveStock ?? product.unitStock ?? (product as any).unitProducts?.reduce?.((sum: number, up: any) => sum + (up.stock || 0), 0) ?? product.globalStock)
+      : product.globalStock;
+    if (isTracking && effectiveStock <= 0) { toast.error('Stok habis!'); return; }
     let success = false;
     setCart(prev => {
       const existing = prev.find(i => i.productId === product.id);
       if (existing) {
         if (isTracking) {
           const existingQtyInSub = existing.qtyUnitType === 'main' ? (existing.qty + 1) * existing.conversionRate : existing.qty + 1;
-          if (existingQtyInSub > product.globalStock) { toast.error(`Stok tidak cukup! Tersedia: ${product.globalStock}`); return prev; }
+          if (existingQtyInSub > effectiveStock) { return prev; }
         }
         success = true;
         return prev.map(i => i.productId === product.id ? { ...i, qty: i.qty + 1 } : i);
       }
       const hasSubUnit = product.subUnit && product.conversionRate > 1;
       const initialQtyInSub = hasSubUnit ? 1 : 1;
-      if (isTracking && initialQtyInSub > product.globalStock) { toast.error(`Stok tidak cukup! Tersedia: ${product.globalStock}`); return prev; }
+      if (isTracking && initialQtyInSub > effectiveStock) { return prev; }
       success = true;
       return [...prev, {
         productId: product.id, productName: product.name, productImageUrl: product.imageUrl || undefined, qty: 1,
@@ -275,10 +280,11 @@ export function SaleForm({
         conversionRate: product.conversionRate || 1,
         mainUnit: product.unit || 'pcs', subUnit: product.subUnit || '',
         sellPricePerSubUnit: product.sellPricePerSubUnit || 0,
-        globalStock: product.globalStock, trackStock: product.trackStock !== false, category: product.category ?? null
+        globalStock: effectiveStock, trackStock: product.trackStock !== false, category: product.category ?? null
       }];
     });
     if (success) toast.success(`${product.name} ditambahkan`);
+    else if (isTracking) toast.error(`Stok tidak cukup!`);
   }, []);
 
   const updateQty = (index: number, delta: number) => {
@@ -288,7 +294,7 @@ export function SaleForm({
         const newQty = item.qty + delta;
         const newQtyInSub = item.qtyUnitType === 'main' ? newQty * item.conversionRate : newQty;
         // Only check stock limit when trackStock is enabled
-        if (item.trackStock && newQtyInSub > item.globalStock) { toast.error(`Stok tidak cukup! Tersedia: ${item.globalStock}`); return prev; }
+        if (item.trackStock && newQtyInSub > item.globalStock) { return prev; }
         return prev.map((it, i) => i !== index ? it : { ...it, qty: newQty });
       });
     } else {
@@ -627,7 +633,10 @@ export function SaleForm({
             {filteredProducts.map(product => {
               const inCart = cart.find(i => i.productId === product.id);
               const hasSubUnit = product.subUnit && product.conversionRate > 1;
-              const stockLow = product.globalStock <= (product.minStock || 0);
+              const effectiveStock = product.stockType === 'per_unit'
+                ? (product.effectiveStock ?? product.unitStock ?? (product as any).unitProducts?.reduce?.((sum: number, up: any) => sum + (up.stock || 0), 0) ?? product.globalStock)
+                : product.globalStock;
+              const stockLow = effectiveStock <= (product.minStock || 0);
               const displayPrice = hasSubUnit && product.sellPricePerSubUnit ? product.sellPricePerSubUnit : product.sellingPrice || 0;
               const unitLabel = hasSubUnit ? product.subUnit : (product.unit || 'pcs');
               const hasImage = !!product.imageUrl;
@@ -658,8 +667,8 @@ export function SaleForm({
                       <p className="font-bold text-sm text-primary truncate">{formatCurrency(displayPrice)}</p>
                       <p className="text-[10px] text-muted-foreground shrink-0">/{unitLabel}</p>
                     </div>
-                    {hasSubUnit && <p className="text-[10px] text-muted-foreground">{formatStock(product.globalStock, product.unit, product.subUnit, product.conversionRate)}</p>}
-                    {!hasSubUnit && <p className={cn("text-[10px]", stockLow ? "text-red-500 font-medium" : "text-muted-foreground")}>Stok: {product.globalStock} {product.unit || 'pcs'}</p>}
+                    {hasSubUnit && <p className="text-[10px] text-muted-foreground">{formatStock(effectiveStock, product.unit, product.subUnit, product.conversionRate)}</p>}
+                    {!hasSubUnit && <p className={cn("text-[10px]", stockLow ? "text-red-500 font-medium" : "text-muted-foreground")}>Stok: {effectiveStock} {product.unit || 'pcs'}</p>}
                   </div>
                 </button>
               );

@@ -102,3 +102,25 @@ Stage Summary:
 - The Prisma error on STB is from OLD BUILD that doesn't have these fixes
 - User MUST rebuild on Mac and re-transfer to STB for fixes to take effect
 - All documented bugs (1-14) were already fixed; these were additional bugs
+
+---
+Task ID: 5
+Agent: Main
+Task: Deep frontend audit and fix remaining bugs causing "semuanya belum"
+
+Work Log:
+- Deep audit of 5 major frontend components (ProductsModule, TransactionsModule, DashboardModule, SaleForm, SalesTaskDashboard)
+- Found 10 additional bugs, fixed the critical ones:
+- CRITICAL FIX: SaleForm per-unit products can't be added to cart (globalStock=0 check blocked all per-unit products)
+- CRITICAL FIX: DashboardModule sales targets section crashes on undefined fields (totalPercent, totalWithAdmin, etc.)
+- HIGH FIX: TransactionsModule products fetched without unitId, so effectiveStock/unitStock not populated for per-unit products
+- HIGH FIX: ProductsModule per-unit stock display always showed 0 when effectiveStock not available
+- Removed side effects (toast.error) from setState updater in SaleForm (React Strict Mode violation)
+- All fixes use `?? 0` null-safe defaults and effectiveStock fallback to unitProducts sum
+
+Stage Summary:
+- 6 more bugs fixed across SaleForm, DashboardModule, TransactionsModule, ProductsModule
+- Per-unit stock was the ROOT CAUSE of "produk dan stok" — products appeared out of stock
+- Dashboard crash was ROOT CAUSE of dashboard not loading for super_admin
+- Total bugs fixed across sessions: 14 (documented) + 3 (session 4) + 6 (session 5) = 23 bugs
+- Lint clean, dev server running

@@ -475,9 +475,10 @@ export default function TransactionsModule() {
     ...POLLING_CONFIG
   });
 
+  const productsUnitId = user?.role === 'super_admin' ? selectedUnitId || undefined : user?.unitId || undefined;
   const { data: productsData } = useQuery({
-    queryKey: ['products'],
-    queryFn: () => apiFetch<any>('/api/products'),
+    queryKey: ['products', productsUnitId],
+    queryFn: () => apiFetch<any>(`/api/products${productsUnitId ? `?unitId=${productsUnitId}` : ''}`),
     enabled: showSaleForm,
   });
 

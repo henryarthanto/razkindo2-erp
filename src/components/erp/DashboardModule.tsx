@@ -758,27 +758,27 @@ export default function DashboardModule() {
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2 mb-2">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold">Total Pencapaian Tim</span>
-                  {dashboard.superAdminContribution > 0 && (
+                  {((dashboard.superAdminContribution ?? 0) > 0) && (
                     <Badge className="bg-violet-500 hover:bg-violet-600 text-xs">
                       <Zap className="w-3 h-3 mr-1" />
-                      +{formatCurrency(dashboard.superAdminContribution)} Admin
+                      +{formatCurrency(dashboard.superAdminContribution ?? 0)} Admin
                     </Badge>
                   )}
                 </div>
                 <span className={cn(
                   "text-xl sm:text-2xl font-bold",
-                  dashboard.totalPercent >= 100 ? "text-green-600" : dashboard.totalPercent >= 70 ? "text-amber-600" : "text-red-600"
+                  (dashboard.totalPercent ?? 0) >= 100 ? "text-green-600" : (dashboard.totalPercent ?? 0) >= 70 ? "text-amber-600" : "text-red-600"
                 )}>
-                  {dashboard.totalPercent}%
+                  {dashboard.totalPercent ?? 0}%
                 </span>
               </div>
-              <Progress value={Math.min(dashboard.totalPercent, 100)} className="h-3" />
+              <Progress value={Math.min(dashboard.totalPercent ?? 0, 100)} className="h-3" />
               <div className="flex flex-wrap gap-1 justify-between mt-2 text-xs sm:text-sm">
                 <span className="text-muted-foreground">
-                  {formatCurrency(dashboard.totalWithAdmin)} dari {formatCurrency(dashboard.totalTarget)}
+                  {formatCurrency(dashboard.totalWithAdmin ?? 0)} dari {formatCurrency(dashboard.totalTarget ?? 0)}
                 </span>
                 <span className="text-muted-foreground">
-                  Sisa: {formatCurrency(Math.max(0, dashboard.totalTarget - dashboard.totalWithAdmin))}
+                  Sisa: {formatCurrency(Math.max(0, (dashboard.totalTarget ?? 0) - (dashboard.totalWithAdmin ?? 0)))}
                 </span>
               </div>
             </div>
@@ -821,11 +821,11 @@ export default function DashboardModule() {
             </div>
 
             {/* Super Admin Contribution Note */}
-            {dashboard.superAdminContribution > 0 && (
+            {((dashboard.superAdminContribution ?? 0) > 0) && (
               <div className="flex items-center gap-2 p-2 rounded-lg bg-violet-50 dark:bg-violet-950 border border-violet-200 dark:border-violet-800">
                 <Zap className="w-4 h-4 text-violet-600 shrink-0" />
                 <p className="text-xs text-violet-700 dark:text-violet-300">
-                  <span className="font-medium">Super Admin</span> juga berkontribusi penjualan sebesar {formatCurrency(dashboard.superAdminContribution)} bulan ini, membantu mendongkrak pencapaian tim!
+                  <span className="font-medium">Super Admin</span> juga berkontribusi penjualan sebesar {formatCurrency(dashboard.superAdminContribution ?? 0)} bulan ini, membantu mendongkrak pencapaian tim!
                 </p>
               </div>
             )}
