@@ -37,8 +37,10 @@ export const SUPABASE_ANON_KEY: string = (() => {
 
 /** Supabase service role key — bypasses all RLS policies, server-side only */
 export const SUPABASE_SERVICE_KEY: string = (() => {
-  const key = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY;
-  if (!key) throw new Error('NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY is required in .env');
+  // Prefer SUPABASE_SERVICE_ROLE_KEY (no NEXT_PUBLIC_ prefix — keeps it server-side only)
+  // Fallback to NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY for backward compatibility
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY is required in .env');
   return key;
 })();
 
