@@ -248,7 +248,6 @@ export async function POST(request: NextRequest) {
           .maybeSingle();
 
         if (prevTx) {
-          txTimer.stop();
           perfMonitor.incrementCounter('transactions.create_success');
           return NextResponse.json({
             transaction: toCamelCase(prevTx),

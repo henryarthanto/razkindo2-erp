@@ -81,3 +81,24 @@ Stage Summary:
 - Main deployment issue: database tables not synced (prisma db push needed on STB)
 - Build successful - ready for deployment
 - User needs to: run prisma db push on STB to create missing tables
+
+---
+Task ID: 4
+Agent: Main
+Task: Fix remaining bugs causing "transaksi belum, penugasan belum, produk dan stok, semuanya" on STB
+
+Work Log:
+- Analyzed STB journalctl error: `Unknown field unitProducts:unitProducts(*, unit` Prisma error
+- Verified all 14 documented bugs are already fixed in current codebase
+- Found and fixed NEW Bug: PWA products route uses camelCase (subUnit, conversionRate) in Supabase PostgREST select string → changed to snake_case (sub_unit, conversion_rate)
+- Found and fixed NEW Bug: Transaction route double txTimer.stop() on idempotency path → removed redundant stop before return
+- Found and fixed CRITICAL Bug: SalesTaskManagement.tsx handleViewDetail stores raw API response instead of extracting .task property → causes TypeError crash on detailOpen.reports.length → root cause of "penugasan belum"
+- Verified sales-tasks API routes are correct (GET/POST/PATCH/DELETE all working)
+- Verified TransactionsModule, SaleForm, ProductsModule frontend components are working
+- Dev server running fine, lint clean
+
+Stage Summary:
+- 3 new bugs fixed: PWA select camelCase, txTimer double-stop, SalesTaskManagement detail crash
+- The Prisma error on STB is from OLD BUILD that doesn't have these fixes
+- User MUST rebuild on Mac and re-transfer to STB for fixes to take effect
+- All documented bugs (1-14) were already fixed; these were additional bugs

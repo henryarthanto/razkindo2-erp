@@ -338,9 +338,9 @@ export default function SalesTaskManagement() {
 
   function handleViewDetail(task: SalesTask) {
     // Fetch full task detail with reports
-    apiFetch<SalesTaskDetail>(`/api/sales-tasks/${task.id}`)
-      .then((detail) => {
-        setDetailOpen(detail);
+    apiFetch<{ task: SalesTaskDetail }>(`/api/sales-tasks/${task.id}`)
+      .then((res) => {
+        setDetailOpen(res.task);
       })
       .catch((err: any) => {
         toast.error(err.message || 'Gagal memuat detail tugas');
