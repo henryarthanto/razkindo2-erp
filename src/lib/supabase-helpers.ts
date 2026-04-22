@@ -67,8 +67,10 @@ export function toSnakeCase(obj: Record<string, any>): Record<string, any> {
 
 /**
  * Convert an array of rows from snake_case to camelCase
+ * Defensive: returns [] when rows is null/undefined (Supabase .data can be null)
  */
-export function rowsToCamelCase<T = Record<string, any>>(rows: Record<string, any>[]): T[] {
+export function rowsToCamelCase<T = Record<string, any>>(rows: Record<string, any>[] | null | undefined): T[] {
+  if (!rows) return [];
   return rows.map(row => toCamelCase(row)) as T[];
 }
 

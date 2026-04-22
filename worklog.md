@@ -29,3 +29,24 @@ Stage Summary:
 - 7 new Prisma indexes added for query optimization
 - N+1 query eliminated in transaction cancel route
 - Services verified working (Next.js on 3000, event-queue on 3004)
+
+---
+Task ID: 2
+Agent: Main
+Task: Fix TypeError crash on STB deployment and create clean deployment script
+
+Work Log:
+- Analyzed TypeError: Cannot read properties of undefined (reading 'map') crash on STB
+- Identified root cause: rowsToCamelCase() in supabase-helpers.ts calls .map() without null guard
+- Fixed rowsToCamelCase() to accept null/undefined and return [] defensively
+- Added global uncaughtException/unhandledRejection handlers in instrumentation.ts for better crash diagnostics
+- Enhanced instrumentation.ts with per-step logging to identify which service fails
+- Created scripts/deploy-stb-standalone.sh for automated Mac→STB deployment
+- Verified lint passes (only 1 minor warning)
+- Verified dev server starts correctly with new instrumentation
+
+Stage Summary:
+- rowsToCamelCase() now defensive against null/undefined input (fixes root crash cause)
+- Global error handlers added for production stack traces (fixes "ignore-listed frames" issue)
+- Deploy script created at scripts/deploy-stb-standalone.sh
+- User needs to: git pull on Mac → clean rebuild → re-transfer to STB
