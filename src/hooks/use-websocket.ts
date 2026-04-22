@@ -6,6 +6,15 @@ import { io, Socket } from 'socket.io-client';
 // =====================================================================
 // WEBSOCKET HOOK - Real-time connection to ERP WebSocket service
 // Provides auto-reconnect, auth, event subscription, and online presence
+//
+// AUTO-DETECTION LOGIC:
+//   - If NEXT_PUBLIC_WS_URL is set (build-time), use it directly
+//   - Otherwise, detect environment:
+//     a) Try XTransformPort pattern (works with Caddy gateway on z.ai)
+//     b) Fall back to direct port connection (works on STB without proxy)
+//
+// This ensures WebSocket works in BOTH development (z.ai) and production
+// (STB direct access) environments without code changes.
 // =====================================================================
 
 interface UseWebSocketOptions {
@@ -31,12 +40,48 @@ interface UseWebSocketReturn {
 let _socket: Socket | null = null;
 let _lastAuthData: { userId: string; role: string; unitId: string; userName: string; authToken: string } | null = null;
 let _refCount = 0;
+let _connectionMode: 'xtransform' | 'direct' | 'custom' = 'xtransform';
+let _directPortAttempted = false;
 
-function getOrCreateSocket(): Socket {
-  if (_socket) return _socket;
+/** The port where the event-queue service runs */
+const WS_SERVICE_PORT = 3004;
 
-  _socket = io('/?XTransformPort=3004', {
-    path: '/',
+/**
+ * Determine the Socket.io connection URL based on environment.
+ *
+ * Priority:
+ *   1. NEXT_PUBLIC_WS_URL (explicit override — e.g., "http://192.168.100.64:3004")
+ *   2. XTransformPort pattern (z.ai gateway — "/?XTransformPort=3004")
+ *   3. Direct connection fallback (STB — "http://{host}:{port}")
+ */
+function getSocketUrl(): { url: string; path: string; mode: 'xtransform' | 'direct' | 'custom' } {
+  // 1. Explicit custom URL (set at build time via NEXT_PUBLIC_WS_URL)
+  const customUrl = process.env.NEXT_PUBLIC_WS_URL;
+  if (customUrl) {
+    return { url: customUrl, path: '/', mode: 'custom' };
+  }
+
+  // 2. XTransformPort pattern (works with Caddy gateway)
+  // This is the default for z.ai development environment
+  return { url: '/?XTransformPort=' + WS_SERVICE_PORT, path: '/', mode: 'xtransform' };
+}
+
+/**
+ * Try connecting to the WebSocket service directly on the WS port.
+ * Used as a fallback when XTransformPort pattern fails (no Caddy proxy).
+ */
+function getDirectUrl(): { url: string; path: string } {
+  if (typeof window === 'undefined') {
+    return { url: `http://127.0.0.1:${WS_SERVICE_PORT}`, path: '/' };
+  }
+  // Use the same hostname the browser is on, but on the WS service port
+  const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+  return { url: `${protocol}//${window.location.hostname}:${WS_SERVICE_PORT}`, path: '/' };
+}
+
+function createSocket(url: string, path: string): Socket {
+  const socket = io(url, {
+    path,
     transports: ['websocket', 'polling'],
     reconnection: true,
     reconnectionAttempts: 10,
@@ -47,20 +92,57 @@ function getOrCreateSocket(): Socket {
   });
 
   // Graceful fallback: stop reconnecting after max attempts exhausted
-  _socket.on('reconnect_failed', () => {
+  socket.on('reconnect_failed', () => {
     console.warn(
       '[WS] Max reconnection attempts reached. WebSocket service may be unavailable on this deployment.',
     );
+
+    // If XTransformPort mode failed, try direct port connection
+    if (_connectionMode === 'xtransform' && !_directPortAttempted) {
+      _directPortAttempted = true;
+      console.info('[WS] Trying direct port connection fallback...');
+      _socket?.disconnect();
+      _socket = null;
+
+      const direct = getDirectUrl();
+      _connectionMode = 'direct';
+      _socket = createSocket(direct.url, direct.path);
+
+      // Re-register if we have auth data
+      _socket.on('connect', () => {
+        console.log('[WS] Direct connection established:', _socket?.id);
+        if (_lastAuthData) {
+          _socket?.emit('register', {
+            userId: _lastAuthData.userId,
+            roles: [_lastAuthData.role],
+            unitId: _lastAuthData.unitId,
+            userName: _lastAuthData.userName,
+          });
+        }
+      });
+
+      _socket.on('disconnect', (reason) => {
+        console.log('[WS] Direct disconnected:', reason);
+      });
+
+      _socket.on('connect_error', (err) => {
+        console.warn('[WS] Direct connection error:', err.message);
+      });
+
+      _socket.connect();
+      return;
+    }
+
     console.info(
       '[WS] Real-time features are disabled. You can refresh the page to retry.',
     );
   });
 
   // Global connection logging — re-auth on reconnect
-  _socket.on('connect', () => {
-    console.log('[WS] Connected:', _socket?.id);
+  socket.on('connect', () => {
+    console.log('[WS] Connected:', socket.id, `(mode: ${_connectionMode})`);
     if (_lastAuthData) {
-      _socket?.emit('register', {
+      socket.emit('register', {
         userId: _lastAuthData.userId,
         roles: [_lastAuthData.role],
         unitId: _lastAuthData.unitId,
@@ -69,22 +151,33 @@ function getOrCreateSocket(): Socket {
     }
   });
 
-  _socket.on('disconnect', (reason) => {
+  socket.on('disconnect', (reason) => {
     console.log('[WS] Disconnected:', reason);
   });
 
-  _socket.on('connect_error', (err) => {
+  socket.on('connect_error', (err) => {
     console.warn('[WS] Connection error:', err.message);
     // If we've exhausted reconnection attempts, disable further attempts
-    if (_socket && !_socket.connected) {
-      const activeReconnect = _socket.io?.opts?.reconnection;
-      if (activeReconnect && _socket.io?.engine?.reconnectAttemptsRemaining === 0) {
+    if (socket && !socket.connected) {
+      const activeReconnect = socket.io?.opts?.reconnection;
+      if (activeReconnect && (socket.io?.engine as any)?.reconnectAttemptsRemaining === 0) {
         console.warn('[WS] Connection failed after max retries. Disabling reconnection.');
-        _socket.io.opts.reconnection = false;
+        socket.io.opts.reconnection = false;
       }
     }
   });
 
+  return socket;
+}
+
+function getOrCreateSocket(): Socket {
+  if (_socket) return _socket;
+
+  const { url, path, mode } = getSocketUrl();
+  _connectionMode = mode;
+  _directPortAttempted = false;
+
+  _socket = createSocket(url, path);
   return _socket;
 }
 
@@ -96,6 +189,7 @@ export function disconnectWebSocket(): void {
     _socket = null;
     _lastAuthData = null;
     _refCount = 0;
+    _directPortAttempted = false;
   }
 }
 
@@ -169,6 +263,7 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
         _socket = null;
         _lastAuthData = null;
         _refCount = 0;
+        _directPortAttempted = false;
       }
     };
   }, [enabled, userId, role, unitId, userName, authToken]);

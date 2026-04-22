@@ -158,6 +158,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Pre-compute values for transaction steps
+    const expectedPaidAmount = txCamel.paidAmount; // For optimistic concurrency check
     const newPaidAmount = txCamel.paidAmount + data.amount;
     const newRemaining = txCamel.total - newPaidAmount;
     const newHppPaid = txCamel.hppPaid + hppPortion;
@@ -213,11 +214,12 @@ export async function POST(request: NextRequest) {
         })
         .eq('id', data.transactionId)
         .neq('payment_status', 'paid')
+        .eq('paid_amount', expectedPaidAmount)
         .select('payment_status, remaining_amount')
-        .single();
+        .maybeSingle();
       if (error) throw error;
       if (!updatedTx) {
-        throw new Error('Transaksi sudah lunas oleh pembayaran lain. Silakan refresh halaman.');
+        throw new Error('CONCURRENT_MODIFICATION: Transaksi diubah oleh pembayaran lain secara bersamaan. Silakan refresh dan coba lagi.');
       }
       // Validate remaining amount after update (double-payment guard)
       if (updatedTx.remaining_amount < 0) {
@@ -406,7 +408,8 @@ export async function POST(request: NextRequest) {
     console.error('Create payment error:', error);
     const message = error instanceof Error ? error.message : 'Terjadi kesalahan server';
     const status = error instanceof Error && error.message.includes('tidak ditemukan') ? 404 : 
-          error instanceof Error && (error.message.includes('melebihi') || error.message.includes('belum disetujui') || error.message.includes('dibatalkan') || error.message.includes('wajib') || error.message.includes('non_negative') || error.message.includes('constraint') || error.message.includes('Stok') || error.message.includes('stok') || error.message.includes('Saldo tidak mencukupi') || error.message.includes('sudah lunas')) ? 400 : 500;
+          error instanceof Error && (error.message.includes('melebihi') || error.message.includes('belum disetujui') || error.message.includes('dibatalkan') || error.message.includes('wajib') || error.message.includes('non_negative') || error.message.includes('constraint') || error.message.includes('Stok') || error.message.includes('stok') || error.message.includes('Saldo tidak mencukupi') || error.message.includes('sudah lunas')) ? 400 :
+          error instanceof Error && error.message.includes('CONCURRENT_MODIFICATION') ? 409 : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }

@@ -14,6 +14,17 @@ import { toCamelCase, camelToSnake } from '@/lib/supabase-helpers';
 // Avoids hitting the DB on every request for the same user
 const _userCache = new Map<string, { active: boolean; expiresAt: number }>();
 const USER_CACHE_TTL = 60_000; // 60 seconds
+const USER_CACHE_MAX_SIZE = 1000; // Prevent unbounded memory growth
+
+/** Periodic cleanup of expired entries */
+function cleanupUserCache(): void {
+  const now = Date.now();
+  for (const [key, entry] of _userCache) {
+    if (entry.expiresAt <= now) {
+      _userCache.delete(key);
+    }
+  }
+}
 
 // =====================================================================
 // HELPERS: camelCase ↔ snake_case column mapping
@@ -91,11 +102,24 @@ export async function verifyAuthUser(authHeader: string | null): Promise<string 
     .from('users')
     .select('id, is_active, status')
     .eq('id', userId)
-    .single();
+    .maybeSingle();
 
   const isActive = !!(user && user.is_active && user.status === 'approved');
 
-  // Update cache
+  // Evict oldest entries if cache is too large (LRU-like)
+  if (_userCache.size >= USER_CACHE_MAX_SIZE) {
+    cleanupUserCache();
+    // If still too large after cleanup, remove the first 100 entries
+    if (_userCache.size >= USER_CACHE_MAX_SIZE) {
+      let count = 0;
+      for (const key of _userCache.keys()) {
+        _userCache.delete(key);
+        count++;
+        if (count >= 100) break;
+      }
+    }
+  }
+
   _userCache.set(userId, {
     active: isActive,
     expiresAt: Date.now() + USER_CACHE_TTL

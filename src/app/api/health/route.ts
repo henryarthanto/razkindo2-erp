@@ -6,13 +6,14 @@
 // connectivity, memory usage, and circuit breaker states.
 // =====================================================================
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/supabase';
 import { CircuitBreaker } from '@/lib/circuit-breaker';
 import { getDegradationLevel, featureFlags } from '@/lib/graceful-degradation';
 import { memoryGuard } from '@/lib/memory-guard';
 import { getPoolStats } from '@/lib/connection-pool';
 import { isPushConfigured } from '@/lib/push-notification';
+import { verifyAuthToken } from '@/lib/token';
 import { perfMonitor } from '@/lib/performance-monitor';
 
 type CheckStatus = 'ok' | 'warning' | 'error';
@@ -74,7 +75,13 @@ interface HealthResponse {
   };
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // ── Auth check: return minimal info without auth, full details with auth ──
+  const authUserId = verifyAuthToken(request.headers.get('authorization'));
+  if (!authUserId) {
+    return NextResponse.json({ status: 'ok' });
+  }
+
   const timestamp = new Date().toISOString();
   const uptime = Math.floor(process.uptime());
 

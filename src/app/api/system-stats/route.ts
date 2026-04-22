@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuthUser } from '@/lib/token';
+import { enforceSuperAdmin } from '@/lib/require-auth';
 import { execSync } from 'child_process';
 
 interface RamInfo {
@@ -39,8 +39,10 @@ interface DiskInfo {
 
 export async function GET(request: NextRequest) {
   try {
-    const authUserId = await verifyAuthUser(request.headers.get('authorization'));
-    if (!authUserId) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    const authResult = await enforceSuperAdmin(request);
+    if (!authResult.success) {
+      return authResult.response;
+    }
 
     // RAM info from /proc/meminfo (works on Linux)
     let ram: RamInfo | null = null;
@@ -108,9 +110,8 @@ export async function GET(request: NextRequest) {
       };
 
       const t1 = readCpuTimes();
-      // Wait 200ms
-      const start = Date.now();
-      while (Date.now() - start < 200) {}
+      // Wait 200ms — use async sleep instead of busy-wait to avoid blocking event loop
+      await new Promise(resolve => setTimeout(resolve, 200));
       const t2 = readCpuTimes();
 
       const diffs = t2.map((v, i) => v - (t1[i] || 0));

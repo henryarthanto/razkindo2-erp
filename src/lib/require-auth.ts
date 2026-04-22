@@ -37,7 +37,7 @@ async function requireSuperAdminInternal(request: NextRequest): Promise<{
     .from('users')
     .select('id, name, role, is_active, status')
     .eq('id', userId)
-    .single();
+    .maybeSingle();
 
   // Map snake_case to camelCase (recursive — handles nested objects)
   const user = toCamelCase(row);
@@ -68,7 +68,7 @@ export async function enforceSuperAdmin(request: NextRequest): Promise<{ success
     .from('users')
     .select('id, name, role, is_active, status')
     .eq('id', userId)
-    .single();
+    .maybeSingle();
 
   // Map snake_case to camelCase (recursive — handles nested objects)
   const user = toCamelCase(row);
@@ -96,7 +96,7 @@ export async function enforceFinanceRole(request: NextRequest): Promise<{ succes
     .from('users')
     .select('id, name, role, is_active, status')
     .eq('id', userId)
-    .single();
+    .maybeSingle();
 
   // Map snake_case to camelCase (recursive — handles nested objects)
   const user = toCamelCase(row);

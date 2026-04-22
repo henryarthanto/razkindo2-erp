@@ -12,6 +12,10 @@
 //
 // Supabase pooler format:
 //   postgresql://postgres.[project-ref]:[password]@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres
+//
+// OPTIMIZED FOR LOW-MEMORY DEPLOYMENTS:
+//   Pool sizes are configurable via env vars. Defaults are conservative
+//   to work on devices with limited RAM (e.g., STB with 1.9GB RAM).
 // =====================================================================
 
 import type { Pool, PoolConfig } from 'pg';
@@ -24,25 +28,36 @@ let _transactionPool: Pool | null = null;
 let _sessionPool: Pool | null = null;
 
 // ---------------------------------------------------------------------------
-// Configuration
+// Configuration — Environment-Variable Driven for flexibility
 // ---------------------------------------------------------------------------
+
+/**
+ * Read a numeric env var with a default value.
+ * This allows tuning pool sizes at runtime without code changes.
+ */
+function getEnvInt(key: string, defaultValue: number): number {
+  const val = process.env[key];
+  if (!val) return defaultValue;
+  const parsed = parseInt(val, 10);
+  return isNaN(parsed) ? defaultValue : parsed;
+}
 
 /** Pool configuration for transaction-mode connections (high concurrency) */
 const TRANSACTION_POOL_CONFIG: PoolConfig = {
-  max: 20, // Max simultaneous connections
-  min: 2,  // Min idle connections
-  idleTimeoutMillis: 30_000,      // Reclaim idle connections after 30s
-  connectionTimeoutMillis: 10_000, // Fail fast if no connection in 10s
-  maxLifetimeMs: 3_600_000,       // Recycle connections after 1 hour
-  allowExitOnIdle: false,         // Never exit — Next.js dev server must stay alive
+  max: getEnvInt('DB_TX_POOL_MAX', 10),       // Reduced from 20 → 10 for STB
+  min: getEnvInt('DB_TX_POOL_MIN', 1),        // Reduced from 2 → 1 for STB
+  idleTimeoutMillis: 30_000,                   // Reclaim idle connections after 30s
+  connectionTimeoutMillis: 10_000,              // Fail fast if no connection in 10s
+  maxLifetimeMs: 3_600_000,                    // Recycle connections after 1 hour
+  allowExitOnIdle: false,                       // Never exit — Next.js dev server must stay alive
 };
 
 /** Pool configuration for session-mode connections (DDL, transactions) */
 const SESSION_POOL_CONFIG: PoolConfig = {
-  max: 5,  // Lower limit — DDL operations are infrequent
-  min: 1,
-  idleTimeoutMillis: 60_000,      // Longer idle timeout for admin ops
-  connectionTimeoutMillis: 30_000, // Longer timeout for DDL operations
+  max: getEnvInt('DB_SESSION_POOL_MAX', 3),    // Reduced from 5 → 3 for STB
+  min: getEnvInt('DB_SESSION_POOL_MIN', 0),    // Reduced from 1 → 0 for STB
+  idleTimeoutMillis: 60_000,                    // Longer idle timeout for admin ops
+  connectionTimeoutMillis: 30_000,              // Longer timeout for DDL operations
   maxLifetimeMs: 3_600_000,
   allowExitOnIdle: false,
 };
@@ -109,11 +124,9 @@ export async function getTransactionPool(): Promise<Pool> {
     console.error('[ConnectionPool:Tx] Unexpected pool error:', err.message);
   });
 
-  _transactionPool.on('connect', () => {
-    // Only log on first connect to avoid spam
-  });
-
-  console.log('[ConnectionPool:Tx] Transaction-mode pool initialized');
+  console.log(
+    `[ConnectionPool:Tx] Transaction-mode pool initialized (max: ${TRANSACTION_POOL_CONFIG.max}, min: ${TRANSACTION_POOL_CONFIG.min})`
+  );
 
   return _transactionPool;
 }
@@ -145,7 +158,9 @@ export async function getSessionPool(): Promise<Pool> {
     console.error('[ConnectionPool:Session] Unexpected pool error:', err.message);
   });
 
-  console.log('[ConnectionPool:Session] Session-mode pool initialized');
+  console.log(
+    `[ConnectionPool:Session] Session-mode pool initialized (max: ${SESSION_POOL_CONFIG.max}, min: ${SESSION_POOL_CONFIG.min})`
+  );
 
   return _sessionPool;
 }
@@ -267,8 +282,11 @@ async function getStatsForPool(
   }
 
   try {
-    // Quick connectivity check
-    await pool.query('SELECT 1');
+    // Quick connectivity check with timeout
+    const result = await Promise.race([
+      pool.query('SELECT 1'),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+    ]);
 
     return {
       name,

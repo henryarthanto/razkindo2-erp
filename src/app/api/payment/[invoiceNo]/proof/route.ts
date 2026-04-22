@@ -8,6 +8,7 @@ import { toCamelCase, generateId, createEvent } from '@/lib/supabase-helpers';
 import { formatCurrency } from '@/lib/erp-helpers';
 import { getWhatsAppConfig, sendMessage } from '@/lib/whatsapp';
 import { wsEmit } from '@/lib/ws-dispatch';
+import { getUploadDir } from '@/lib/paths';
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB raw for non-images
 const MAX_RAW_IMAGE_SIZE = 20 * 1024 * 1024; // 20MB for images (will be compressed)
@@ -150,7 +151,7 @@ export async function POST(
     }
 
     // Prepare upload directory
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'payment-proofs');
+    const uploadDir = getUploadDir('payment-proofs');
     if (!existsSync(uploadDir)) {
       await mkdir(uploadDir, { recursive: true });
     }
@@ -290,7 +291,7 @@ export async function cleanupOldProofs(): Promise<{ deletedRecords: number; dele
 
   try {
     const cutoff = new Date(now - PROOF_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'payment-proofs');
+    const uploadDir = getUploadDir('payment-proofs');
 
     // Fetch old proofs
     const { data: oldProofs, error: fetchError } = await db
@@ -308,7 +309,7 @@ export async function cleanupOldProofs(): Promise<{ deletedRecords: number; dele
     // Delete physical files
     for (const proof of oldProofs) {
       try {
-        const filePath = path.join(process.cwd(), 'public', proof.file_url);
+        const filePath = getUploadDir(proof.file_url.replace(/^\/uploads\//, ''));
         if (existsSync(filePath)) {
           await unlink(filePath);
           deletedFiles++;

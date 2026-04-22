@@ -189,6 +189,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ─── Atomic guard: use conditional update to prevent TOCTOU race condition ───
+    const expectedPaidAmount = txCamel.paidAmount; // For optimistic concurrency check
     const lunasUpdate: Record<string, any> = {
       paid_amount: total,
       remaining_amount: 0,
@@ -211,13 +212,14 @@ export async function POST(request: NextRequest) {
       .update(lunasUpdate)
       .eq('id', transactionId)
       .neq('payment_status', 'paid')
+      .eq('paid_amount', expectedPaidAmount)
       .select('id')
       .maybeSingle();
 
     if (updateError || !updatedTx) {
-      // If no rows were affected, the transaction was already paid (race condition)
+      // If no rows were affected, the transaction was modified concurrently (race condition)
       if (!updatedTx && !updateError) {
-        return NextResponse.json({ error: 'Transaksi sudah lunas (sedang diproses)' }, { status: 400 });
+        return NextResponse.json({ error: 'Transaksi diubah secara bersamaan. Silakan refresh dan coba lagi.' }, { status: 409 });
       }
       throw updateError;
     }

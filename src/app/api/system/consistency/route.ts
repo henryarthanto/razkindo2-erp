@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { consistencyChecker } from '@/lib/consistency-checker';
+import { requireAuth } from '@/lib/require-auth';
 
 // =====================================================================
 // GET /api/system/consistency - Run all consistency checks
 // POST /api/system/consistency - Run a specific check by name
 // =====================================================================
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const userId = await requireAuth(request);
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const results = await consistencyChecker.runAll();
 
@@ -35,6 +41,11 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const userId = await requireAuth(request);
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const body = await request.json();
     const { name } = body;

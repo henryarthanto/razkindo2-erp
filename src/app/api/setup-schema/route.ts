@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { verifyAuthUser } from '@/lib/token';
 import { db } from '@/lib/supabase';
 import { getSessionPool } from '@/lib/connection-pool';
+import { getProjectFile } from '@/lib/paths';
 
 // =====================================================================
 // SETUP SCHEMA - Checks if Supabase tables exist (requires auth)
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
     if (!authUserId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    const { data: authUser } = await db.from('users').select('role').eq('id', authUserId).single();
+    const { data: authUser } = await db.from('users').select('role').eq('id', authUserId).maybeSingle();
     if (!authUser || authUser.role !== 'super_admin') {
       return NextResponse.json({ error: 'Akses ditolak' }, { status: 403 });
     }
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
     if (!authUserId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    const { data: authUser } = await db.from('users').select('role').eq('id', authUserId).single();
+    const { data: authUser } = await db.from('users').select('role').eq('id', authUserId).maybeSingle();
     if (!authUser || authUser.role !== 'super_admin') {
       return NextResponse.json({ error: 'Hanya Super Admin yang dapat menjalankan setup schema' }, { status: 403 });
     }
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
 
     const { readFile } = await import('fs/promises');
     const { join } = await import('path');
-    const schemaSql = await readFile(join(process.cwd(), 'supabase-schema.sql'), 'utf-8');
+    const schemaSql = await readFile(getProjectFile('supabase-schema.sql'), 'utf-8');
 
     // Use session pool for DDL + transaction support
     const { Pool } = await import('pg');

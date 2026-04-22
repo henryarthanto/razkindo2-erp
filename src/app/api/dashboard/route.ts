@@ -4,12 +4,12 @@ import { toCamelCase, rowsToCamelCase } from '@/lib/supabase-helpers';
 import { verifyAndGetAuthUser } from '@/lib/token';
 
 /** Wrap a promise with a timeout (ms). Returns fallback on timeout or error. */
-function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T, label: string): Promise<T> {
+function withTimeout<T>(promise: PromiseLike<T>, ms: number, fallback: T, label: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
   });
-  return Promise.race([promise, timeout])
+  return Promise.race([promise, timeout] as [Promise<T>, Promise<never>])
     .finally(() => clearTimeout(timer))
     .catch((err) => {
       console.error(`[Dashboard] ${label} failed:`, err?.message || err);
@@ -18,8 +18,9 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T, label: str
 }
 
 /** Wrap a query promise with try/catch, returning fallback on any error. */
-function safeQuery<T>(promise: Promise<T>, fallback: T, label: string): Promise<T> {
-  return promise.catch((err) => {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function safeQuery(promise: PromiseLike<any>, fallback: any, label: string): Promise<any> {
+  return Promise.resolve(promise).catch((err) => {
     console.error(`[Dashboard] ${label} failed:`, err?.message || err);
     return fallback;
   });
@@ -255,9 +256,9 @@ export async function GET(request: NextRequest) {
             .lte('transaction_date', filterEnd.toISOString());
           if (unitId) txQuery = txQuery.eq('unit_id', unitId);
 
-          return txQuery.then(({ data: txRows }) => {
+          return txQuery.then(async ({ data: txRows }) => {
             const txIds = (txRows || []).map((r: any) => r.id);
-            if (txIds.length === 0) return { data: [] };
+            if (txIds.length === 0) return { data: [] as any[] };
 
             // Fetch items only for these transactions, limit to last 500 for safety
             let itemQuery = db.from('transaction_items')
