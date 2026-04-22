@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
             trackStock: true,
             stockType: 'centralized',
             unit: prod.unit || null,
-            subUnit: prod.sub_unit || null,
+            subUnit: prod.subUnit || null,
             name: prod.name || '',
           });
         }

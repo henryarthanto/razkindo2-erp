@@ -116,14 +116,15 @@ export async function PATCH(
     if (data.description !== undefined) updateData.description = data.description;
     if (data.category !== undefined) updateData.category = data.category;
     if (data.unit !== undefined) updateData.unit = data.unit;
-    if (data.subUnit !== undefined) updateData.subUnit = data.subUnit;
-    if (data.conversionRate !== undefined) updateData.conversionRate = data.conversionRate;
+    if (data.subUnit !== undefined) updateData.sub_unit = data.subUnit;
+    if (data.conversionRate !== undefined) updateData.conversion_rate = data.conversionRate;
     if (data.avgHpp !== undefined) updateData.avg_hpp = data.avgHpp;
     if (data.sellingPrice !== undefined) updateData.selling_price = data.sellingPrice;
     if (data.sellPricePerSubUnit !== undefined) updateData.sell_price_per_sub_unit = data.sellPricePerSubUnit;
     if (data.minStock !== undefined) updateData.min_stock = data.minStock;
     if (data.stockType !== undefined) updateData.stock_type = data.stockType;
     if (data.trackStock !== undefined) updateData.track_stock = data.trackStock;
+    if (data.purchasePrice !== undefined) updateData.purchase_price = data.purchasePrice;
     if (data.imageUrl !== undefined) updateData.image_url = data.imageUrl;
 
     const { data: product } = await db
