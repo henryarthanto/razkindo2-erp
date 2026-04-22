@@ -172,338 +172,492 @@ async function handleCustomersSummary() {
   return text;
 }
 
-// ============ FINANCIAL SNAPSHOT DATA FETCHER ============
+// ============ PURE LOGIC FINANCIAL ANALYSIS ============
 
-/**
- * Fetch comprehensive financial data by calling the financial-snapshot endpoint internally.
- * This gives the LLM access to ALL financial data for deep analysis.
- */
-async function fetchFinancialSnapshot(authHeader: string | null, origin: string): Promise<any | null> {
-  try {
-    const url = `${origin}/api/ai/financial-snapshot`;
-    const res = await fetch(url, {
-      headers: {
-        'Authorization': authHeader || '',
-        'Content-Type': 'application/json',
-      },
-      signal: AbortSignal.timeout(15000), // 15s timeout
-    });
-    if (!res.ok) {
-      console.error('[AI Chat] Financial snapshot fetch failed:', res.status);
-      return null;
-    }
-    const json = await res.json();
-    return json.data || null;
-  } catch (err) {
-    console.error('[AI Chat] Financial snapshot fetch error:', err);
-    return null;
+async function handleHppProfitAnalysis() {
+  // Get all sales transactions
+  const { data: sales } = await db.from('transactions')
+    .select('total, total_hpp, total_profit, paid_amount, hpp_paid, profit_paid, hpp_unpaid, profit_unpaid, payment_status')
+    .eq('type', 'sale')
+    .in('status', ['approved', 'paid']);
+
+  const list = sales || [];
+  const totalSales = list.reduce((s: number, t: any) => s + (t.total || 0), 0);
+  const totalHpp = list.reduce((s: number, t: any) => s + (t.total_hpp || 0), 0);
+  const totalProfit = list.reduce((s: number, t: any) => s + (t.total_profit || 0), 0);
+  const totalPaid = list.reduce((s: number, t: any) => s + (t.paid_amount || 0), 0);
+  const hppPaid = list.reduce((s: number, t: any) => s + (t.hpp_paid || 0), 0);
+  const profitPaid = list.reduce((s: number, t: any) => s + (t.profit_paid || 0), 0);
+  const hppUnpaid = list.reduce((s: number, t: any) => s + (t.hpp_unpaid || 0), 0);
+  const profitUnpaid = list.reduce((s: number, t: any) => s + (t.profit_unpaid || 0), 0);
+  const unpaidCount = list.filter((t: any) => t.payment_status !== 'paid').length;
+  const paidCount = list.filter((t: any) => t.payment_status === 'paid').length;
+
+  const hppRecoveryRate = totalHpp > 0 ? ((hppPaid / totalHpp) * 100).toFixed(1) : '0';
+  const profitRealizedRate = totalProfit > 0 ? ((profitPaid / totalProfit) * 100).toFixed(1) : '0';
+
+  let text = `🔍 **Analisis HPP & Profit**\n\n`;
+  text += `--- **AKUMULASI DANA** ---\n\n`;
+  text += `💰 Total Penjualan: **${rp(totalSales)}** (${list.length} transaksi)\n`;
+  text += `💵 Total Dibayar: **${rp(totalPaid)}**\n\n`;
+
+  text += `📊 **HPP (Harga Pokok):**\n`;
+  text += `  • Total HPP: **${rp(totalHpp)}**\n`;
+  text += `  • ✅ Sudah kembali (di tangan): **${rp(hppPaid)}** (${hppRecoveryRate}%)\n`;
+  text += `  • ⏳ Masih tertahan (piutang): **${rp(hppUnpaid)}**\n\n`;
+
+  text += `📈 **Profit (Keuntungan):**\n`;
+  text += `  • Total Profit: **${rp(totalProfit)}**\n`;
+  text += `  • ✅ Sudah di tangan: **${rp(profitPaid)}** (${profitRealizedRate}%)\n`;
+  text += `  • ⏳ Masih tertahan: **${rp(profitUnpaid)}**\n\n`;
+
+  text += `--- **REKOMENDASI** ---\n\n`;
+  if (hppUnpaid > totalHpp * 0.3) {
+    text += `⚠️ **HPP tertahan ${rp(hppUnpaid)}** (${hppRecoveryRate}% recovery) — Prioritaskan penagihan piutang!\n`;
+    text += `  → ${unpaidCount} transaksi belum lunas perlu di-follow up\n`;
   }
+  if (profitUnpaid > totalProfit * 0.3) {
+    text += `⚠️ **Profit tertahan ${rp(profitUnpaid)}** — Tingkatkan penagihan untuk merealisasikan keuntungan\n`;
+  }
+  if (totalSales > 0) {
+    const margin = ((totalProfit / totalSales) * 100).toFixed(1);
+    text += `📊 Margin keseluruhan: **${margin}%**\n`;
+    if (parseFloat(margin) < 15) {
+      text += `  → Margin di bawah 15%, pertimbangkan menaikkan harga atau menekan HPP\n`;
+    }
+  }
+  text += `✅ Transaksi lunas: ${paidCount} | ⏳ Belum lunas: ${unpaidCount}\n`;
+  return text;
 }
 
-/**
- * Build a structured financial context string from snapshot data for LLM consumption.
- */
-function buildFinancialContext(data: any): string {
-  if (!data) return '';
+async function handleRestockRecommendation() {
+  // Get products with stock and recent sales data
+  const { data: products } = await db.from('products').select('*').eq('is_active', true).eq('track_stock', true);
+  const { data: recentItems } = await db.from('transaction_items')
+    .select('product_id, qty, created_at')
+    .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
 
-  const lines: string[] = [];
-  lines.push('=== DATA KEUANGAN RAZKINDO (Real-time Snapshot) ===');
-  lines.push('');
+  // Calculate velocity per product
+  const velocityMap = new Map<string, number>();
+  (recentItems || []).forEach((item: any) => {
+    const current = velocityMap.get(item.product_id) || 0;
+    velocityMap.set(item.product_id, current + (item.qty || 0));
+  });
 
-  // 1. Cash Pools (HPP & Profit accumulation)
-  if (data.cashPools) {
-    const cp = data.cashPools;
-    lines.push('--- 1. POOL DANA ---');
-    lines.push(`HPP sudah dikembalikan (di tangan): ${rp(cp.hppInHand)}`);
-    lines.push(`Profit sudah di tangan: ${rp(cp.profitInHand)}`);
-    lines.push(`HPP masih tertahan (belum dibayar pelanggan): ${rp(cp.hppUnpaid)}`);
-    lines.push(`Profit tertahan (belum dibayar pelanggan): ${rp(cp.profitUnpaid)}`);
-    lines.push(`Total penjualan keseluruhan: ${rp(cp.totalSales)} (${cp.totalTransactions} transaksi)`);
-    lines.push(`Total uang masuk (dibayar): ${rp(cp.totalPaid)}`);
-    lines.push(`Total piutang tersisa: ${rp(cp.totalReceivables)}`);
-    lines.push(`Total HPP keseluruhan: ${rp(cp.totalHpp)}`);
-    lines.push(`Total Profit keseluruhan: ${rp(cp.totalProfit)}`);
-    lines.push('');
+  const productList = (products || []).map((p: any) => {
+    const velocity30d = velocityMap.get(p.id) || 0;
+    const dailyVelocity = velocity30d / 30;
+    const daysOfStock = dailyVelocity > 0 ? Math.round(p.global_stock / dailyVelocity) : 999;
+    const needsRestock = p.global_stock <= p.min_stock || daysOfStock < 14;
+    const suggestedQty = dailyVelocity > 0 ? Math.max(0, Math.ceil(dailyVelocity * 30 - p.global_stock)) : 0;
+    const estimatedCost = suggestedQty * (p.avg_hpp || p.purchase_price || 0);
+
+    return {
+      name: p.name,
+      unit: p.unit || 'pcs',
+      currentStock: p.global_stock,
+      minStock: p.min_stock,
+      velocity30d,
+      dailyVelocity: Math.round(dailyVelocity * 10) / 10,
+      daysOfStock,
+      needsRestock,
+      suggestedQty,
+      estimatedCost,
+      avgHpp: p.avg_hpp || 0,
+    };
+  }).filter(p => p.needsRestock || p.suggestedQty > 0)
+    .sort((a, b) => a.daysOfStock - b.daysOfStock);
+
+  let text = `🛒 **Saran Restock**\n\n`;
+  if (productList.length === 0) {
+    text += `_Semua stok masih mencukupi!_ ✅\n`;
+    return text;
   }
 
-  // 2. Account Balances
-  if (data.accountBalances) {
-    const ab = data.accountBalances;
-    lines.push('--- 2. SALDO REKENING ---');
-    if (ab.bankAccounts?.length > 0) {
-      ab.bankAccounts.forEach((b: any) => {
-        if (b.isActive) lines.push(`Bank ${b.bankName} (${b.name}): ${rp(b.balance)}`);
-      });
+  let totalEstCost = 0;
+  productList.forEach((p, i) => {
+    const urgency = p.daysOfStock < 7 ? '🔴' : p.daysOfStock < 14 ? '🟡' : '🟢';
+    text += `${urgency} **${p.name}**\n`;
+    text += `   Stok: ${p.currentStock} ${p.unit} (Min: ${p.minStock}) | Velocity: ${p.dailyVelocity}/hari\n`;
+    text += `   Sisa: ~${p.daysOfStock} hari | Saran beli: **${p.suggestedQty} ${p.unit}** (${rp(p.estimatedCost)})\n\n`;
+    totalEstCost += p.estimatedCost;
+  });
+
+  text += `---\n💰 **Total estimasi biaya restock: ${rp(totalEstCost)}**\n`;
+  return text;
+}
+
+async function handleSalesTrend() {
+  // Get last 4 months of sales data
+  const months: any[] = [];
+  for (let i = 3; i >= 0; i--) {
+    const start = new Date();
+    start.setMonth(start.getMonth() - i, 1);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setMonth(end.getMonth() + 1);
+
+    const { data: sales } = await db.from('transactions')
+      .select('total, total_profit')
+      .eq('type', 'sale')
+      .in('status', ['approved', 'paid'])
+      .gte('transaction_date', start.toISOString())
+      .lt('transaction_date', end.toISOString());
+
+    const list = sales || [];
+    const totalSales = list.reduce((s: number, t: any) => s + (t.total || 0), 0);
+    const totalProfit = list.reduce((s: number, t: any) => s + (t.total_profit || 0), 0);
+
+    months.push({
+      label: format(start, 'MMMM yyyy', { locale: id }),
+      totalSales,
+      totalProfit,
+      count: list.length,
+      margin: totalSales > 0 ? ((totalProfit / totalSales) * 100).toFixed(1) : '0',
+    });
+  }
+
+  let text = `📊 **Analisa Tren Penjualan (4 Bulan)**\n\n`;
+  months.forEach((m, i) => {
+    const growth = i > 0 && months[i - 1].totalSales > 0
+      ? (((m.totalSales - months[i - 1].totalSales) / months[i - 1].totalSales) * 100).toFixed(1)
+      : null;
+    const growthIcon = growth === null ? '' : parseFloat(growth) >= 0 ? '▲' : '▼';
+    const growthText = growth !== null ? ` (${growthIcon}${Math.abs(parseFloat(growth))}%)` : '';
+
+    text += `📅 **${m.label}**\n`;
+    text += `   💰 Sales: ${rp(m.totalSales)} | 📈 Profit: ${rp(m.totalProfit)} | 📝 ${m.count} trx | Margin: ${m.margin}%${growthText}\n\n`;
+  });
+
+  // Trend analysis
+  const latest = months[months.length - 1];
+  const previous = months[months.length - 2];
+  text += `---\n🔍 **Analisis:**\n`;
+  if (previous && previous.totalSales > 0) {
+    const salesChange = ((latest.totalSales - previous.totalSales) / previous.totalSales * 100).toFixed(1);
+    const profitChange = ((latest.totalProfit - previous.totalProfit) / previous.totalProfit * 100).toFixed(1);
+    if (parseFloat(salesChange) >= 0) {
+      text += `📈 Penjualan naik **${salesChange}%** dari bulan sebelumnya\n`;
+    } else {
+      text += `📉 Penjualan turun **${Math.abs(parseFloat(salesChange))}%** dari bulan sebelumnya\n`;
+      text += `  → Perlu evaluasi: apakah faktor musiman, kompetitor, atau internal?\n`;
     }
-    if (ab.cashBoxes?.length > 0) {
-      ab.cashBoxes.forEach((cb: any) => {
-        const unit = cb.unit?.name || '';
-        lines.push(`Brankas ${cb.name}${unit ? ` [${unit}]` : ''}: ${rp(cb.balance)}`);
-      });
+    if (parseFloat(profitChange) >= 0) {
+      text += `📈 Profit naik **${profitChange}%**\n`;
+    } else {
+      text += `📉 Profit turun **${Math.abs(parseFloat(profitChange))}%** — Cek HPP naik atau diskon berlebihan\n`;
     }
-    lines.push(`Total saldo semua rekening: ${rp(ab.totalBalance)}`);
-    lines.push('');
   }
+  return text;
+}
 
-  // 3. Sales Trend (4 months)
-  if (data.salesTrend?.length > 0) {
-    lines.push('--- 3. TREN PENJUALAN (4 Bulan Terakhir) ---');
-    data.salesTrend.forEach((m: any) => {
-      const growthIcon = m.salesGrowthPct === null ? '' : m.salesGrowthPct >= 0 ? '▲' : '▼';
-      const growthStr = m.salesGrowthPct !== null ? ` (${growthIcon}${Math.abs(m.salesGrowthPct)}%)` : '';
-      lines.push(`${m.month}: Sales ${rp(m.totalSales)}, Profit ${rp(m.totalProfit)}, ${m.txCount} trx, Avg ${rp(m.avgOrderValue)}/order${growthStr}`);
-    });
-    lines.push('');
-  }
+async function handleCashFlowAudit() {
+  const now = new Date();
+  const last7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const last30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-  // 4. Top Products (90 days)
-  if (data.topProducts?.length > 0) {
-    lines.push('--- 4. PRODUK TERLARIS (90 Hari Terakhir) ---');
-    data.topProducts.forEach((p: any, i: number) => {
-      lines.push(`${i + 1}. ${p.productName}: Revenue ${rp(p.totalRevenue)}, ${p.totalQty} qty, velocity ${p.velocity}/hari, avg ${rp(p.avgRevenuePerOrder)}/trx`);
-    });
-    lines.push('');
-  }
+  // Inflow (payments received)
+  const { data: payments7d } = await db.from('payments')
+    .select('amount, hpp_portion, profit_portion')
+    .gte('paid_at', last7d.toISOString());
+  const { data: payments30d } = await db.from('payments')
+    .select('amount, hpp_portion, profit_portion')
+    .gte('paid_at', last30d.toISOString());
 
-  // 5. Customer Purchase Patterns
-  if (data.customerPatterns?.length > 0) {
-    lines.push('--- 5. POLA PEMBELIAN KONSUMEN (180 Hari) ---');
-    data.customerPatterns.slice(0, 15).forEach((c: any) => {
-      const overdue = c.isOverdue ? ' ⚠️ OVERDUE' : '';
-      const nextOrder = c.predictedNextOrder
-        ? `Prediksi order berikutnya: ${format(new Date(c.predictedNextOrder), 'dd MMM yyyy', { locale: id })}`
-        : 'Prediksi: tidak cukup data';
-      const typical = c.typicalProducts?.length > 0
-        ? `Produk biasa: ${c.typicalProducts.map((tp: any) => `${tp.productName}(x${tp.frequency})`).join(', ')}`
-        : '';
-      lines.push(`${c.customerName}: ${c.totalOrders} order, total ${rp(c.totalSpent)}, avg ${rp(c.avgOrderValue)}/order, rata-rata setiap ${c.avgDaysBetweenOrders} hari${overdue}`);
-      if (typical) lines.push(`  → ${typical}`);
-      lines.push(`  → ${nextOrder}`);
-    });
-    lines.push('');
-  }
+  // Outflow (finance requests processed)
+  const { data: outflow7d } = await db.from('finance_requests')
+    .select('amount, type')
+    .eq('status', 'processed')
+    .gte('processed_at', last7d.toISOString());
+  const { data: outflow30d } = await db.from('finance_requests')
+    .select('amount, type')
+    .eq('status', 'processed')
+    .gte('processed_at', last30d.toISOString());
 
-  // 6. Purchase Recommendations
-  if (data.purchaseRecommendations?.length > 0) {
-    lines.push('--- 6. REKOMENDASI RESTOCK ---');
-    data.purchaseRecommendations.forEach((r: any) => {
-      lines.push(`${r.productName}: stok ${r.currentStock} ${r.unit}, velocity ${r.velocity}/hari, sisa ${r.daysOfStock} hari → Saran beli ${r.suggestedQty} ${r.unit}, est. biaya ${rp(r.estimatedCost)} (HPP ${rp(r.avgHpp)}/${r.unit})`);
+  const inflow7d = (payments7d || []).reduce((s: number, p: any) => s + (p.amount || 0), 0);
+  const inflow30d = (payments30d || []).reduce((s: number, p: any) => s + (p.amount || 0), 0);
+  const outflow7dAmount = (outflow7d || []).reduce((s: number, p: any) => s + (p.amount || 0), 0);
+  const outflow30dAmount = (outflow30d || []).reduce((s: number, p: any) => s + (p.amount || 0), 0);
+
+  // Check for inconsistencies
+  const { data: allTx } = await db.from('transactions')
+    .select('id, invoice_no, total, paid_amount, remaining_amount, payment_status')
+    .in('status', ['approved', 'paid']);
+  const inconsistencies = (allTx || []).filter((t: any) => {
+    const expected = Math.round((t.paid_amount || 0) + (t.remaining_amount || 0));
+    return Math.abs(expected - (t.total || 0)) > 1;
+  });
+
+  let text = `💵 **Audit Arus Kas**\n\n`;
+  text += `--- **7 Hari Terakhir** ---\n`;
+  text += `📥 Uang masuk: **${rp(inflow7d)}**\n`;
+  text += `📤 Uang keluar: **${rp(outflow7dAmount)}**\n`;
+  text += `📊 Bersih: **${rp(inflow7d - outflow7dAmount)}**\n\n`;
+
+  text += `--- **30 Hari Terakhir** ---\n`;
+  text += `📥 Uang masuk: **${rp(inflow30d)}**\n`;
+  text += `📤 Uang keluar: **${rp(outflow30dAmount)}**\n`;
+  text += `📊 Bersih: **${rp(inflow30d - outflow30dAmount)}**\n\n`;
+
+  if (inconsistencies.length > 0) {
+    text += `🔴 **${inconsistencies.length} inkonsistensi data terdeteksi!**\n`;
+    inconsistencies.slice(0, 5).forEach((t: any) => {
+      text += `  • ${t.invoice_no}: total ${rp(t.total)} vs paid+remaining ${rp((t.paid_amount || 0) + (t.remaining_amount || 0))}\n`;
     });
-    lines.push('');
+    text += `\n⚠️ Segera perbaiki inkonsistensi data di atas.\n`;
   } else {
-    lines.push('--- 6. REKOMENDASI RESTOCK: Stok semua produk masih mencukupi ---');
-    lines.push('');
+    text += `✅ Tidak ada inkonsistensi data terdeteksi.\n`;
   }
-
-  // 7. Discrepancies
-  if (data.discrepancies) {
-    const d = data.discrepancies;
-    lines.push('--- 7. DETEKSI SELISIH & MASALAH ---');
-    lines.push(`Transaksi belum lunas: ${d.unpaidCount} (total piutang ${rp(d.totalUnpaidReceivables)})`);
-    lines.push(`Inkonsistensi data (total ≠ paid + remaining): ${d.inconsistencyCount} transaksi`);
-    lines.push(`Payment mismatch (paid_amount ≠ sum payments): ${d.paymentMismatchCount} transaksi`);
-    if (d.dataInconsistencies?.length > 0) {
-      lines.push('Detail inkonsistensi:');
-      d.dataInconsistencies.slice(0, 5).forEach((inc: any) => {
-        lines.push(`  ${inc.invoiceNo}: total ${rp(inc.total)} vs paid+remaining ${rp(inc.expectedTotal)} (selisih ${rp(Math.abs(inc.discrepancy))})`);
-      });
-    }
-    if (d.paymentMismatches?.length > 0) {
-      lines.push('Detail payment mismatch:');
-      d.paymentMismatches.slice(0, 5).forEach((pm: any) => {
-        lines.push(`  ${pm.invoiceNo}: paid_amount ${rp(pm.transactionPaidAmount)} vs actual payments ${rp(pm.actualPaymentSum)} (selisih ${rp(Math.abs(pm.discrepancy))})`);
-      });
-    }
-    lines.push('');
-  }
-
-  // 8. Cash Flow
-  if (data.cashFlowSummary) {
-    const cf = data.cashFlowSummary;
-    lines.push('--- 8. ARUS KAS ---');
-    lines.push(`7 hari terakhir: Uang masuk ${rp(cf.last7Days.inflow)}, Uang keluar ${rp(cf.last7Days.outflow)}, Bersih ${rp(cf.last7Days.net)}`);
-    lines.push(`30 hari terakhir: Uang masuk ${rp(cf.last30Days.inflow)}, Uang keluar ${rp(cf.last30Days.outflow)}, Bersih ${rp(cf.last30Days.net)}`);
-    lines.push('');
-  }
-
-  // 9. Company Debts
-  if (data.companyDebts) {
-    const cd = data.companyDebts;
-    lines.push('--- 9. HUTANG PERUSAHAAN ---');
-    lines.push(`Total hutang tersisa: ${rp(cd.totalDebtRemaining)} (${cd.totalDebtCount} hutang)`);
-    lines.push(`Hutang overdue: ${cd.overdueDebtCount} (total ${rp(cd.totalOverdueAmount)})`);
-    if (cd.debts?.length > 0) {
-      cd.debts.slice(0, 8).forEach((d: any) => {
-        const status = d.isOverdue ? '🔴 OVERDUE' : d.status || '';
-        const daysInfo = d.daysUntilDue !== null ? (d.isOverdue ? ` (terlambat ${Math.abs(d.daysUntilDue)} hari)` : ` (${d.daysUntilDue} hari lagi)`) : '';
-        lines.push(`  ${d.creditorName}: ${rp(d.remainingAmount)} / ${rp(d.totalAmount)} [${d.debtType}]${daysInfo} ${status}`);
-      });
-    }
-    lines.push('');
-  }
-
-  // 10. Product Asset Value
-  if (data.productAssetValue) {
-    const pa = data.productAssetValue;
-    lines.push('--- 10. NILAI ASET PRODUK ---');
-    lines.push(`Total nilai aset (stok × HPP): ${rp(pa.totalAssetValue)} (${pa.totalProducts} produk)`);
-    if (pa.categoryBreakdown?.length > 0) {
-      lines.push('Per kategori:');
-      pa.categoryBreakdown.forEach((c: any) => {
-        lines.push(`  ${c.category}: ${rp(c.assetValue)} (${c.productCount} produk)`);
-      });
-    }
-    if (pa.topProductsByValue?.length > 0) {
-      lines.push('Top 5 by aset value:');
-      pa.topProductsByValue.slice(0, 5).forEach((p: any) => {
-        lines.push(`  ${p.productName}: ${rp(p.assetValue)} (stok ${p.stock} × HPP ${rp(p.avgHpp)})`);
-      });
-    }
-    lines.push('');
-  }
-
-  lines.push('=== AKHIR DATA KEUANGAN ===');
-
-  return lines.join('\n');
+  return text;
 }
 
-// ============ FINANCIAL ANALYSIS INTENT DETECTION ============
+async function handleFinancialHealth() {
+  // Get comprehensive financial data
+  const { data: sales } = await db.from('transactions')
+    .select('total, total_hpp, total_profit, paid_amount')
+    .eq('type', 'sale')
+    .in('status', ['approved', 'paid']);
+  const { data: receivables } = await db.from('receivables').select('*').eq('status', 'active');
+  const { data: debts } = await db.from('company_debts').select('*').eq('status', 'active').eq('is_active', true);
+  const { data: bankAccounts } = await db.from('bank_accounts').select('balance, is_active').eq('is_active', true);
+  const { data: cashBoxes } = await db.from('cash_boxes').select('balance, is_active').eq('is_active', true);
+  const { data: products } = await db.from('products').select('global_stock, avg_hpp, selling_price, min_stock, track_stock, is_active').eq('is_active', true).eq('track_stock', true);
 
-/**
- * Detect if a message is a financial analysis request that needs the full snapshot data.
- * This is different from simple data queries — these need AI reasoning over financial data.
- */
-function isFinancialAnalysis(msg: string): boolean {
-  const q = msg.toLowerCase();
+  const totalSales = (sales || []).reduce((s: number, t: any) => s + (t.total || 0), 0);
+  const totalProfit = (sales || []).reduce((s: number, t: any) => s + (t.total_profit || 0), 0);
+  const totalPaid = (sales || []).reduce((s: number, t: any) => s + (t.paid_amount || 0), 0);
+  const totalReceivables = (receivables || []).reduce((s: number, r: any) => s + (r.remaining_amount || 0), 0);
+  const totalDebts = (debts || []).reduce((s: number, d: any) => s + (d.remaining_amount || 0), 0);
+  const totalBankBalance = (bankAccounts || []).reduce((s: number, b: any) => s + (b.balance || 0), 0);
+  const totalCashBalance = (cashBoxes || []).reduce((s: number, c: any) => s + (c.balance || 0), 0);
+  const totalAssetValue = (products || []).reduce((s: number, p: any) => s + ((p.global_stock || 0) * (p.avg_hpp || 0)), 0);
+  const lowStockCount = (products || []).filter((p: any) => p.global_stock <= (p.min_stock || 0)).length;
+  const overdueReceivables = (receivables || []).filter((r: any) => r.overdue_days > 0);
+  const overdueDebts = (debts || []).filter((d: any) => d.due_date && new Date(d.due_date) < new Date());
 
-  // HPP & Profit analysis
-  if (q.match(/hpp|harga\s*pokok|biaya\s*produksi/)) return true;
-  if (q.match(/profit\s*(di\s*tangan|terkumpul|sudah|yang)|laba\s*(di\s*tangan|terkumpul)/)) return true;
-  if (q.match(/uang\s*(yang|sudah)\s*(di\s*tangan|terkumpul|tersedia)/)) return true;
-  if (q.match(/margin\s*(keuntungan|profit)/)) return true;
+  // Health scoring
+  const collectionRate = totalSales > 0 ? (totalPaid / totalSales * 100) : 100;
+  const marginRate = totalSales > 0 ? (totalProfit / totalSales * 100) : 0;
+  const liquidityRatio = totalReceivables > 0 ? ((totalBankBalance + totalCashBalance) / totalReceivables) : 999;
 
-  // Restock & Purchase suggestions
-  if (q.match(/saran\s*(beli|restock|pengadaan)/)) return true;
-  if (q.match(/rekomendasi\s*(beli|restock|stok|pengadaan)/)) return true;
-  if (q.match(/apa\s*(yang|saja)\s*(harus|perlu|sebaiknya)\s*di\s*(beli|restock|adakan)/)) return true;
-  if (q.match(/what\s*(to|should)\s*buy/)) return true;
-  if (q.match(/stok.*(kurang|habis|menipis|perlu)/)) return true;
+  let healthScore = 0;
+  if (collectionRate >= 90) healthScore += 30; else if (collectionRate >= 70) healthScore += 20; else healthScore += 10;
+  if (marginRate >= 20) healthScore += 25; else if (marginRate >= 10) healthScore += 15; else healthScore += 5;
+  if (liquidityRatio >= 1) healthScore += 25; else if (liquidityRatio >= 0.5) healthScore += 15; else healthScore += 5;
+  if (overdueReceivables.length <= 2) healthScore += 20; else if (overdueReceivables.length <= 5) healthScore += 10; else healthScore += 0;
 
-  // Sales pattern analysis
-  if (q.match(/pattern|pola\s*(penjualan|beli)/)) return true;
-  if (q.match(/tren\s*(penjualan|sales|omset)/)) return true;
-  if (q.match(/analisa\s*(penjualan|keuangan|bisnis|financial)/)) return true;
-  if (q.match(/analisis\s*(penjualan|keuangan|bisnis|financial)/)) return true;
-  if (q.match(/growth|pertumbuhan/)) return true;
-  if (q.match(/penjualan.*(per\s*(bulan|2\s*bulan|3\s*bulan|minggu|kuartal))/)) return true;
+  const healthLabel = healthScore >= 80 ? '🟢 Sehat' : healthScore >= 60 ? '🟡 Cukup' : '🔴 Perlu Perhatian';
 
-  // Customer prediction
-  if (q.match(/prediksi|predict|forecast/)) return true;
-  if (q.match(/kemungkinan.*(konsumen|customer|pelanggan).*(beli|order|pesan)/)) return true;
-  if (q.match(/konsumen\s*(mana|yang).*(akan\s*beli|bakal|next)/)) return true;
-  if (q.match(/customer.*(next|akan|will)/)) return true;
+  let text = `🏥 **Kesehatan Keuangan** — Skor: **${healthScore}/100** ${healthLabel}\n\n`;
 
-  // Money flow & Discrepancy
-  if (q.match(/uang\s*masuk|arus\s*kas|cash\s*flow/)) return true;
-  if (q.match(/selisih|discrepancy|ketidaksesuaian/)) return true;
-  if (q.match(/audit|telusuri|investigasi|cek\s*(kecocokan|kebenaran)/)) return true;
-  if (q.match(/masalah\s*(keuangan|finansial|kas)/)) return true;
+  text += `--- **LIQUIDITY** ---\n`;
+  text += `🏦 Saldo Bank: **${rp(totalBankBalance)}**\n`;
+  text += `💰 Saldo Kas: **${rp(totalCashBalance)}**\n`;
+  text += `📋 Piutang: **${rp(totalReceivables)}** (${overdueReceivables.length} overdue)\n`;
+  text += `📊 Collection Rate: **${collectionRate.toFixed(1)}%**\n\n`;
 
-  // General financial health
-  if (q.match(/keuangan\s*(sehat|baik|buruk|how|kondisi)/)) return true;
-  if (q.match(/financial\s*(health|status|review)/)) return true;
-  if (q.match(/kesehatan\s*(keuangan|bisnis|financial)/)) return true;
-  if (q.match(/review\s*(keuangan|financial|bisnis)/)) return true;
-  if (q.match(/laporan\s*(keuangan|financial|lengkap|komprehensif)/)) return true;
-  if (q.match(/report\s*(keuangan|financial)/)) return true;
+  text += `--- **PROFITABILITY** ---\n`;
+  text += `💰 Total Sales: **${rp(totalSales)}**\n`;
+  text += `📈 Total Profit: **${rp(totalProfit)}**\n`;
+  text += `📊 Margin: **${marginRate.toFixed(1)}%**\n\n`;
 
-  // Asset & Debt
-  if (q.match(/aset|asset\s*(value|nilai)/)) return true;
-  if (q.match(/hutang|debt|piutang\s*(total|ringkasan)/)) return true;
+  text += `--- **SOLVENCY** ---\n`;
+  text += `📋 Hutang: **${rp(totalDebts)}** (${overdueDebts.length} overdue)\n`;
+  text += `📦 Nilai Aset Stok: **${rp(totalAssetValue)}**\n\n`;
 
-  return false;
+  text += `--- **STOCK HEALTH** ---\n`;
+  text += `⚠️ Produk stok rendah: **${lowStockCount}**\n\n`;
+
+  text += `--- **REKOMENDASI** ---\n`;
+  if (collectionRate < 80) text += `🔴 Tingkatkan penagihan — collection rate ${collectionRate.toFixed(1)}% masih rendah\n`;
+  if (overdueReceivables.length > 0) text += `🔴 ${overdueReceivables.length} piutang overdue perlu segera ditagih\n`;
+  if (lowStockCount > 0) text += `🟡 ${lowStockCount} produk perlu restock segera\n`;
+  if (marginRate < 15) text += `🟡 Margin ${marginRate.toFixed(1)}% kurang ideal — evaluasi harga jual atau HPP\n`;
+  if (overdueDebts.length > 0) text += `🔴 ${overdueDebts.length} hutang overdue perlu segera dibayar\n`;
+  if (healthScore >= 80) text += `✅ Keuangan dalam kondisi baik! Pertahankan kinerja.\n`;
+
+  return text;
 }
 
-// ============ LLM-POWERED CHAT ============
+async function handleCustomerPrediction() {
+  // Analyze customer purchase patterns
+  const { data: customers } = await db.from('customers')
+    .select('id, name, total_orders, total_spent, last_transaction_date, status')
+    .eq('status', 'active')
+    .order('total_spent', { ascending: false })
+    .limit(50);
 
-/**
- * Enhanced LLM chat with optional financial data context.
- * When financialData is provided, the LLM becomes a financial analyst.
- */
-async function askLLM(
-  message: string,
-  isSuperAdmin: boolean,
-  history: { role: string; content: string }[],
-  financialContext?: string | null,
-): Promise<string> {
-  const ZAI = (await import('z-ai-web-dev-sdk')).default;
-  const zai = await ZAI.create();
+  const { data: recentTx } = await db.from('transactions')
+    .select('customer_id, transaction_date, total, items:transaction_items(product_name, qty)')
+    .eq('type', 'sale')
+    .in('status', ['approved', 'paid'])
+    .gte('transaction_date', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString())
+    .order('transaction_date', { ascending: false });
 
-  const today = format(new Date(), 'EEEE, dd MMMM yyyy', { locale: id });
+  // Build customer purchase frequency
+  const customerActivity = new Map<string, { count: number; lastDate: string; totalSpent: number; products: Map<string, number> }>();
+  (recentTx || []).forEach((tx: any) => {
+    if (!tx.customer_id) return;
+    const existing = customerActivity.get(tx.customer_id) || { count: 0, lastDate: '', totalSpent: 0, products: new Map<string, number>() };
+    existing.count++;
+    existing.totalSpent += (tx.total || 0);
+    if (!existing.lastDate || tx.transaction_date > existing.lastDate) existing.lastDate = tx.transaction_date;
+    (tx.items || []).forEach((item: any) => {
+      if (item.product_name) {
+        existing.products.set(item.product_name, (existing.products.get(item.product_name) || 0) + (item.qty || 0));
+      }
+    });
+    customerActivity.set(tx.customer_id, existing);
+  });
 
-  const systemPrompt = `Kamu adalah "Asisten Keuangan Razkindo" — AI Financial Analyst untuk ERP system Razkindo Group. Kamu adalah analis keuangan cerdas yang memiliki akses penuh ke semua data keuangan perusahaan.
+  // Predict which customers are likely to order
+  const now = new Date();
+  const predictions = (customers || []).map((c: any) => {
+    const activity = customerActivity.get(c.id);
+    if (!activity || activity.count < 2) return null;
 
-INFO HARI INI: ${today}
+    const daysSinceLastOrder = Math.floor((now.getTime() - new Date(c.last_transaction_date || activity.lastDate).getTime()) / (24 * 60 * 60 * 1000));
+    const avgDaysBetweenOrders = Math.max(1, Math.floor(90 / activity.count));
 
-KEMAMPUAN UTAMA:
-1. **Analisis HPP & Profit**: Cek akumulasi uang HPP dan profit yang sudah di tangan, bandingkan dengan yang masih tertahan di piutang
-2. **Saran Restock**: Analisa velocity penjualan per produk, stok tersisa, dan rekomendasikan apa yang harus dibeli berdasarkan pola penjualan aktual
-3. **Analisa Pola Penjualan**: Identifikasi tren penjualan per bulan, 2 bulan, 3 bulan — pertumbuhan, penurunan, seasonal pattern
-4. **Prediksi Konsumen**: Analisa pola pembelian tiap konsumen (frekuensi, produk favorit) dan prediksi kapan mereka akan order lagi
-5. **Audit Arus Kas**: Telusuri semua uang masuk & keluar, deteksi selisih, inkonsistensi data, dan payment mismatch
-6. **Health Check Keuangan**: Evaluasi kesehatan keuangan secara komprehensif (liquidity, solvency, profitability)
-7. **Analisa Hutang & Piutang**: Monitor hutang perusahaan, overdue status, dan piutang yang perlu ditagih
-8. **Nilai Aset**: Hitung dan analisa nilai aset produk berdasarkan stok dan HPP
+    // Predict based on purchase frequency
+    const likelyToOrder = daysSinceLastOrder >= avgDaysBetweenOrders * 0.7;
+    const topProducts = Array.from(activity.products.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([name]) => name);
 
-${isSuperAdmin ? ' kamu memiliki akses penuh ke data HPP, profit, dan semua informasi keuangan sensitif.' : ''}
+    return {
+      name: c.name,
+      totalOrders: c.total_orders || activity.count,
+      totalSpent: c.total_spent || activity.totalSpent,
+      daysSinceLastOrder,
+      avgDaysBetweenOrders,
+      likelyToOrder,
+      topProducts,
+      urgency: daysSinceLastOrder > avgDaysBetweenOrders * 1.5 ? 'high' : daysSinceLastOrder > avgDaysBetweenOrders ? 'medium' : 'low',
+    };
+  }).filter(Boolean)
+    .filter((p: any) => p.likelyToOrder)
+    .sort((a: any, b: any) => {
+      const urgencyOrder = { high: 0, medium: 1, low: 2 };
+      return (urgencyOrder[a.urgency] || 2) - (urgencyOrder[b.urgency] || 2);
+    }) as any[];
 
-ATURAN PENTING:
-- Gunakan Bahasa Indonesia yang profesional namun mudah dipahami
-- Gunakan emoji untuk visual yang menarik (📊📈💰📦⚠️🔍✅🔴🟢)
-- Gunakan **bold** untuk angka/nama penting
-- Selalu berikan ANALISIS dan REKOMENDASI, bukan hanya data mentah
-- Jika ada masalah (selisih, overdue, stok rendah), berikan SOLVING/REKOMENDASI konkret
-- Format angka uang dengan "Rp" dan pemisah ribuan
-- Jawaban harus terstruktur dan mudah dibaca
-- Jika ditanya sesuatu yang TIDAK ada di data, katakan dengan jujur
-- Prioritaskan action items — apa yang harus segera dilakukan
+  let text = `🎯 **Prediksi Konsumen Akan Order**\n\n`;
+  if (predictions.length === 0) {
+    text += `_Tidak cukup data untuk prediksi._\n`;
+    return text;
+  }
 
-CONTOH ANALISIS:
-- "cek uang hpp yang terkumpul" → Berapa HPP di tangan vs tertahan, persentase, rekomendasi alokasi
-- "saran barang apa yang harus dibeli" → Analisa velocity, stok, rekomendasi dengan estimasi biaya
-- "analisa penjualan 3 bulan terakhir" → Tren naik/turun, growth %, insight per bulan
-- "konsumen mana yang kemungkinan akan beli" → Prediksi berdasarkan pola, produk favorit, overdue status
-- "cek uang masuk dan selisihnya" → Audit arus kas, deteksi discrepancy, rekomendasi perbaikan
-- "kesehatan keuangan kita" → Comprehensive health check dengan skor dan rekomendasi`;
+  predictions.slice(0, 10).forEach((p: any, i: number) => {
+    const urgency = p.urgency === 'high' ? '🔴' : p.urgency === 'medium' ? '🟡' : '🟢';
+    text += `${urgency} **${p.name}**\n`;
+    text += `   Terakhir order: ${p.daysSinceLastOrder} hari lalu | Rata-rata: setiap ${p.avgDaysBetweenOrders} hari\n`;
+    if (p.topProducts.length > 0) {
+      text += `   📦 Produk favorit: ${p.topProducts.join(', ')}\n`;
+    }
+    text += `   💰 Total belanja: ${rp(p.totalSpent)} (${p.totalOrders} order)\n\n`;
+  });
 
-  // Build messages array
-  const messages: any[] = [
-    { role: 'system', content: systemPrompt },
-  ];
+  text += `---\n💡 **Rekomendasi:** Hubungi konsumen 🔴 segera untuk follow-up order.\n`;
+  return text;
+}
 
-  // If financial context is available, inject it as a system-level data context
-  if (financialContext) {
-    messages.push({
-      role: 'system',
-      content: `DATA KEUANGAN TERKINI YANG DAPAT KAMU ANALISA:\n\n${financialContext}\n\nGunakan data di atas untuk menjawab pertanyaan user. Berikan analisis mendalam, bukan hanya merangkum data. Identifikasi pola, berikan insight, dan rekomendasikan tindakan.`
+async function handleDebtAnalysis() {
+  const { data: debts } = await db.from('company_debts').select('*').eq('status', 'active').eq('is_active', true).order('remaining_amount', { ascending: false });
+  const { data: receivables } = await db.from('receivables').select('*').eq('status', 'active').order('remaining_amount', { ascending: false });
+
+  let text = `📋 **Analisis Hutang & Piutang**\n\n`;
+
+  // Piutang
+  const totalReceivables = (receivables || []).reduce((s: number, r: any) => s + (r.remaining_amount || 0), 0);
+  const overdueReceivables = (receivables || []).filter((r: any) => r.overdue_days > 0);
+  const totalOverdueReceivables = overdueReceivables.reduce((s: number, r: any) => s + (r.remaining_amount || 0), 0);
+
+  text += `--- **PIUTANG** ---\n`;
+  text += `📋 Total Piutang: **${rp(totalReceivables)}** (${(receivables || []).length} piutang)\n`;
+  text += `🔴 Overdue: **${rp(totalOverdueReceivables)}** (${overdueReceivables.length} piutang)\n\n`;
+
+  if (overdueReceivables.length > 0) {
+    text += `⚠️ **Piutang Overdue:**\n`;
+    overdueReceivables.slice(0, 8).forEach((r: any) => {
+      text += `  🔴 **${r.customer_name || '-'}** — ${rp(r.remaining_amount)} (${r.overdue_days} hari)\n`;
+    });
+    text += `\n`;
+  }
+
+  // Hutang
+  const totalDebts = (debts || []).reduce((s: number, d: any) => s + (d.remaining_amount || 0), 0);
+  const overdueDebts = (debts || []).filter((d: any) => d.due_date && new Date(d.due_date) < new Date());
+
+  text += `--- **HUTANG** ---\n`;
+  text += `📋 Total Hutang: **${rp(totalDebts)}** (${(debts || []).length} hutang)\n`;
+  if (overdueDebts.length > 0) {
+    text += `🔴 Overdue: **${overdueDebts.length}** hutang\n`;
+    overdueDebts.forEach((d: any) => {
+      text += `  🔴 **${d.creditor_name}** — ${rp(d.remaining_amount)}\n`;
     });
   }
 
-  // Add conversation history (last 8 messages for context)
-  messages.push(...history.slice(-8).map(m => ({ role: m.role, content: m.content })));
-  messages.push({ role: 'user', content: message });
-
-  try {
-    const completion = await zai.chat.completions.create({
-      messages,
-      thinking: { type: 'disabled' }
-    });
-
-    return completion.choices[0]?.message?.content || 'Maaf, saya tidak bisa merespons saat ini. Coba lagi nanti.';
-  } catch (err: any) {
-    console.error('LLM error:', err);
-    return '⚠️ AI sedang tidak tersedia. Silakan coba lagi dalam beberapa saat.';
+  text += `\n--- **REKOMENDASI** ---\n`;
+  if (overdueReceivables.length > 0) {
+    text += `🔴 Prioritaskan penagihan ${overdueReceivables.length} piutang overdue (total ${rp(totalOverdueReceivables)})\n`;
   }
+  if (overdueDebts.length > 0) {
+    text += `🔴 Bayar ${overdueDebts.length} hutang overdue segera untuk menghindari penalti\n`;
+  }
+  if (totalReceivables > totalDebts * 2) {
+    text += `📊 Piutang jauh lebih besar dari hutang — fokus penagihan untuk meningkatkan kas\n`;
+  }
+  return text;
+}
+
+async function handleAssetValue() {
+  const { data: products } = await db.from('products').select('*').eq('is_active', true);
+
+  const totalAssetValue = (products || []).reduce((s: number, p: any) => s + ((p.global_stock || 0) * (p.avg_hpp || 0)), 0);
+  const totalSellingValue = (products || []).reduce((s: number, p: any) => s + ((p.global_stock || 0) * (p.selling_price || 0)), 0);
+  const margin = totalAssetValue > 0 ? ((totalSellingValue - totalAssetValue) / totalAssetValue * 100).toFixed(1) : '0';
+
+  // Category breakdown
+  const categoryMap = new Map<string, { assetValue: number; sellingValue: number; count: number }>();
+  (products || []).forEach((p: any) => {
+    const cat = p.category || 'Lainnya';
+    const existing = categoryMap.get(cat) || { assetValue: 0, sellingValue: 0, count: 0 };
+    existing.assetValue += (p.global_stock || 0) * (p.avg_hpp || 0);
+    existing.sellingValue += (p.global_stock || 0) * (p.selling_price || 0);
+    existing.count++;
+    categoryMap.set(cat, existing);
+  });
+
+  let text = `📦 **Nilai Aset Produk**\n\n`;
+  text += `💰 Nilai Aset (HPP): **${rp(totalAssetValue)}**\n`;
+  text += `📈 Nilai Jual: **${rp(totalSellingValue)}**\n`;
+  text += `📊 Potensi Margin: **${margin}%**\n`;
+  text += `📝 Total Produk: **${(products || []).length}**\n\n`;
+
+  if (categoryMap.size > 0) {
+    text += `--- **Per Kategori** ---\n`;
+    Array.from(categoryMap.entries())
+      .sort((a, b) => b[1].assetValue - a[1].assetValue)
+      .forEach(([cat, data]) => {
+        text += `📊 **${cat}**: ${rp(data.assetValue)} (Nilai Jual: ${rp(data.sellingValue)}, ${data.count} produk)\n`;
+      });
+  }
+
+  // Top 5 most valuable
+  const topProducts = (products || [])
+    .map((p: any) => ({ name: p.name, assetValue: (p.global_stock || 0) * (p.avg_hpp || 0), stock: p.global_stock, hpp: p.avg_hpp }))
+    .sort((a, b) => b.assetValue - a.assetValue)
+    .slice(0, 5);
+
+  if (topProducts.length > 0) {
+    text += `\n--- **Top 5 Produk Paling Berharga** ---\n`;
+    topProducts.forEach((p, i) => {
+      text += `${i + 1}. **${p.name}**: ${rp(p.assetValue)} (Stok: ${p.stock}, HPP: ${rp(p.hpp)})\n`;
+    });
+  }
+  return text;
 }
 
 // ============ DATA INTENT DETECTION ============
@@ -518,13 +672,39 @@ function isDataQuery(msg: string, isSuperAdmin: boolean): string | null {
   if (q.match(/sales.*(terbaik|top|terlaris)/)) return 'sales_per_sales';
   if (q.match(/penjualan.*(profit|laba|untung)/)) return 'sales_month';
   if (q.match(/stok.*(rendah|menipis|low)/)) return 'stock_low';
-  if (q.match(/stok.*(habis|kosong)/)) return null;
+  if (q.match(/stok.*(habis|kosong)/)) return 'stock_all';
   if (q.match(/stok|stock/)) return 'stock_all';
   if (q.match(/belum bayar|piutang/) && q.match(/konsumen|customer|siapa/)) return 'customers_unpaid';
   if (q.match(/total piutang|jumlah piutang/)) return 'customers_unpaid';
   if (q.match(/konsumen|customer|pelanggan/) && q.match(/ringkasan|summary|jumlah/)) return 'customers_summary';
   if (q.match(/penawaran|quotation|quote/)) return 'quotation';
   if (q.match(/mou|perjanjian|kerjasama|nota kesepahaman/)) return 'mou';
+  if (q.match(/kontrak|kerja\s*karyawan|contract|perjanjian\s*kerja/)) return 'employee_contract';
+  return null;
+}
+
+// ============ FINANCIAL INTENT DETECTION ============
+
+function isFinancialAnalysis(msg: string): string | null {
+  const q = msg.toLowerCase();
+  if (q.match(/hpp|harga\s*pokok|biaya\s*produksi/)) return 'hpp_profit';
+  if (q.match(/profit\s*(di\s*tangan|terkumpul|sudah|yang)|laba\s*(di\s*tangan|terkumpul)/)) return 'hpp_profit';
+  if (q.match(/uang\s*(yang|sudah)\s*(di\s*tangan|terkumpul|tersedia)/)) return 'hpp_profit';
+  if (q.match(/saran\s*(beli|restock|pengadaan)/)) return 'restock';
+  if (q.match(/rekomendasi\s*(beli|restock|stok|pengadaan)/)) return 'restock';
+  if (q.match(/apa\s*(yang|saja)\s*(harus|perlu|sebaiknya)\s*di\s*(beli|restock|adakan)/)) return 'restock';
+  if (q.match(/tren\s*(penjualan|sales|omset)/)) return 'sales_trend';
+  if (q.match(/analisa\s*(penjualan|keuangan|bisnis|financial)/)) return 'sales_trend';
+  if (q.match(/analisis\s*(penjualan|keuangan|bisnis|financial)/)) return 'sales_trend';
+  if (q.match(/prediksi|predict|forecast/) && q.match(/konsumen|customer|pelanggan/)) return 'customer_prediction';
+  if (q.match(/kemungkinan.*(konsumen|customer|pelanggan).*(beli|order|pesan)/)) return 'customer_prediction';
+  if (q.match(/uang\s*masuk|arus\s*kas|cash\s*flow/)) return 'cash_flow_audit';
+  if (q.match(/selisih|discrepancy|ketidaksesuaian/)) return 'cash_flow_audit';
+  if (q.match(/audit|telusuri|investigasi/)) return 'cash_flow_audit';
+  if (q.match(/keuangan\s*(sehat|baik|buruk|kondisi)/)) return 'financial_health';
+  if (q.match(/kesehatan\s*(keuangan|bisnis|financial)/)) return 'financial_health';
+  if (q.match(/hutang|debt|piutang\s*(total|ringkasan|analisis)/)) return 'debt_analysis';
+  if (q.match(/aset|asset\s*(value|nilai)/)) return 'asset_value';
   return null;
 }
 
@@ -546,12 +726,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Pesan wajib diisi' }, { status: 400 });
     }
 
-    const authHeader = request.headers.get('authorization');
-
     // 1. Check for data query intents first (quick responses)
     const dataIntent = isDataQuery(message, isSuperAdmin);
     let reply: string;
-    let isQuotation = false;
 
     switch (dataIntent) {
       case 'restricted':
@@ -591,42 +768,75 @@ export async function POST(request: NextRequest) {
         reply = JSON.stringify({ action: 'open_mou', partnerName: partnerName || '' });
         return NextResponse.json({ success: true, reply, isMou: true });
       }
-    }
-
-    // 2. Use LLM for general conversation (require auth)
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized — login untuk menggunakan AI chat' }, { status: 401 });
-    }
-
-    const chatHistory = Array.isArray(history) ? history : [];
-
-    // 3. Check if this is a financial analysis query that needs data context
-    let financialContext: string | null = null;
-    let isFinancial = false;
-
-    if (isSuperAdmin && isFinancialAnalysis(message)) {
-      // Derive origin from request URL for internal fetch
-      const origin = new URL(request.url).origin;
-      // Fetch comprehensive financial data for the LLM to analyze
-      const snapshotData = await fetchFinancialSnapshot(authHeader, origin);
-      if (snapshotData) {
-        financialContext = buildFinancialContext(snapshotData);
-        isFinancial = true;
+      case 'employee_contract': {
+        const empName = message.replace(/.*(kontrak|kerja|contract|perjanjian)\s+(karyawan|kerja)?\s*(untuk|kepada|dengan)?\s*/i, '').trim();
+        reply = JSON.stringify({ action: 'open_employee_contract', employeeName: empName || '' });
+        return NextResponse.json({ success: true, reply, isEmployeeContract: true });
       }
     }
 
-    // 4. Call LLM with financial context if available
-    reply = await askLLM(message, isSuperAdmin, chatHistory, financialContext);
+    // 2. Check for financial analysis queries (require auth + super_admin)
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized — login untuk menggunakan chat' }, { status: 401 });
+    }
 
-    return NextResponse.json({
-      success: true,
-      reply,
-      isFinancial,
-    });
+    const financialIntent = isFinancialAnalysis(message);
+    if (isSuperAdmin && financialIntent) {
+      let isFinancial = true;
+      switch (financialIntent) {
+        case 'hpp_profit':
+          reply = await handleHppProfitAnalysis();
+          return NextResponse.json({ success: true, reply, isFinancial });
+        case 'restock':
+          reply = await handleRestockRecommendation();
+          return NextResponse.json({ success: true, reply, isFinancial });
+        case 'sales_trend':
+          reply = await handleSalesTrend();
+          return NextResponse.json({ success: true, reply, isFinancial });
+        case 'customer_prediction':
+          reply = await handleCustomerPrediction();
+          return NextResponse.json({ success: true, reply, isFinancial });
+        case 'cash_flow_audit':
+          reply = await handleCashFlowAudit();
+          return NextResponse.json({ success: true, reply, isFinancial });
+        case 'financial_health':
+          reply = await handleFinancialHealth();
+          return NextResponse.json({ success: true, reply, isFinancial });
+        case 'debt_analysis':
+          reply = await handleDebtAnalysis();
+          return NextResponse.json({ success: true, reply, isFinancial });
+        case 'asset_value':
+          reply = await handleAssetValue();
+          return NextResponse.json({ success: true, reply, isFinancial });
+      }
+    }
+
+    // 3. General conversation fallback — pure logic-based response
+    reply = generateSmartResponse(message, isSuperAdmin);
+    return NextResponse.json({ success: true, reply });
   } catch (error) {
     console.error('AI Chat error:', error);
     return NextResponse.json({ error: 'Gagal menganalisis data' }, { status: 500 });
   }
+}
+
+// ============ SMART RESPONSE GENERATOR ============
+
+function generateSmartResponse(message: string, isSuperAdmin: boolean): string {
+  const q = message.toLowerCase().trim();
+
+  // Greeting
+  if (q.match(/^(hai|halo|hello|hi|selamat|hey)/)) {
+    return `Halo! 👋 Saya **Asisten Razkindo ERP**.\n\nSaya bisa membantu:\n• 💰 Data penjualan (hari/minggu/bulan)\n• 📦 Stok produk & saran restock\n• 📋 Piutang & konsumen\n• 📝 Buat penawaran / MOU\n• 📄 Buat kontrak kerja karyawan\n${isSuperAdmin ? '• 🔍 Analisis HPP & profit\n• 🏥 Cek kesehatan keuangan\n• 🎯 Prediksi konsumen\n• 💵 Audit arus kas\n' : ''}Klik tombol cepat atau tanya langsung!`;
+  }
+
+  // Help
+  if (q.match(/^(help|bantuan|bantu|bisa apa|menu|fitur)/)) {
+    return `📋 **Menu Bantuan**\n\n**Data Cepat:**\n• "penjualan hari ini" / "bulan ini"\n• "stok produk" / "stok rendah"\n• "piutang" / "konsumen"\n• "penjualan per sales"\n\n**Dokumen:**\n• "buat penawaran untuk [nama]"\n• "buat mou dengan [nama]"\n• "buat kontrak kerja karyawan [nama]"\n${isSuperAdmin ? '\n**Analisis Keuangan:**\n• "cek HPP & profit"\n• "saran restock"\n• "analisa penjualan"\n• "prediksi konsumen"\n• "audit uang masuk"\n• "kesehatan keuangan"\n• "analisis hutang & piutang"\n• "nilai aset"' : ''}`;
+  }
+
+  // Default
+  return `Maaf, saya tidak mengerti pertanyaan tersebut. 😅\n\nCoba tanyakan:\n• "penjualan hari ini"\n• "stok produk"\n• "buat penawaran"\n• "buat mou"\n• "buat kontrak kerja"\n${isSuperAdmin ? '• "cek HPP & profit"\n• "kesehatan keuangan"\n' : ''}\nKetik **"help"** untuk melihat semua fitur.`;
 }
 
 export async function DELETE(request: NextRequest) {

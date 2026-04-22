@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '@/lib/api-client';
 import {
-  X, Bot, Trash2, Send, Plus, Download, Volume2, VolumeX,
+  X, Bot, Trash2, Send, Plus, Download,
   Megaphone, Users, CheckCircle2, XCircle, Loader2, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -41,11 +41,6 @@ export default function AIChatPanel() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<'chat' | 'broadcast'>('chat');
 
-  // TTS state
-  const [ttsEnabled, setTtsEnabled] = useState(false);
-  const [playingId, setPlayingId] = useState<number | null>(null);
-  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
-
   // Quotation dialog state
   const [showQuotation, setShowQuotation] = useState(false);
   const [quoData, setQuoData] = useState<any>(null);
@@ -60,6 +55,21 @@ export default function AIChatPanel() {
   const [mouDuration, setMouDuration] = useState('1 Tahun');
   const [mouScope, setMouScope] = useState('');
   const [mouGenerating, setMouGenerating] = useState(false);
+
+  // Contract dialog state
+  const [showContract, setShowContract] = useState(false);
+  const [contractData, setContractData] = useState<any>(null);
+  const [contractEmployee, setContractEmployee] = useState('');
+  const [contractPosition, setContractPosition] = useState('');
+  const [contractDepartment, setContractDepartment] = useState('');
+  const [contractSalary, setContractSalary] = useState('');
+  const [contractStartDate, setContractStartDate] = useState('');
+  const [contractEndDate, setContractEndDate] = useState('');
+  const [contractWorkHours, setContractWorkHours] = useState('08:00 - 17:00');
+  const [contractWorkLocation, setContractWorkLocation] = useState('');
+  const [contractType, setContractType] = useState('PKWTT');
+  const [contractProbationPeriod, setContractProbationPeriod] = useState('3 Bulan');
+  const [contractGenerating, setContractGenerating] = useState(false);
 
   // Broadcast state
   const [broadcastMessage, setBroadcastMessage] = useState('');
@@ -118,6 +128,7 @@ export default function AIChatPanel() {
     { label: '⚠️ Stok rendah', query: 'stok rendah' },
     { label: '📝 Buat penawaran', query: 'penawaran' },
     { label: '📄 Buat MOU', query: 'buat mou' },
+    { label: '📄 Buat Kontrak Kerja', query: 'buat kontrak kerja karyawan' },
   ];
 
   useEffect(() => {
@@ -133,76 +144,11 @@ export default function AIChatPanel() {
       setMessages([{
         role: 'assistant',
         content: isSuperAdmin
-          ? 'Halo! 👋 Saya **Asisten Keuangan Razkindo** — AI Financial Analyst.\n\n🧠 Kini dengan kecerdasan finansial lengkap!\n\n**Analisis Keuangan:**\n• 🔍 Cek HPP & Profit terkumpul\n• 🛒 Saran restock berdasarkan pola penjualan\n• 📊 Analisa tren penjualan (bulanan/kuartal)\n• 🎯 Prediksi konsumen yang akan order\n• 💵 Audit uang masuk & deteksi selisih\n• 🏥 Cek kesehatan keuangan\n\n**Data Cepat:**\n• 💰 Penjualan hari/minggu/bulan\n• 👥 Per sales • 📋 Piutang\n• 📦 Stok • 📝 Penawaran • 📄 MOU\n\n📢 Tab **Broadcast** untuk kirim promo!'
-          : 'Halo! 👋 Saya **Asisten Data Razkindo**.\n\nKlik tombol cepat atau tanya apa saja:\n• 💰 Penjualan hari/minggu/bulan\n• 👥 Penjualan per sales\n• 📋 Piutang & konsumen\n• 📦 Stok produk\n• 📝 Buat penawaran\n• 📄 Buat MOU\n\n📢 Klik tab **Broadcast** untuk kirim promo!'
+          ? 'Halo! 👋 Saya **Asisten Razkindo ERP**.\n\nKini dengan fitur lengkap!\n\n**Analisis Keuangan:**\n• 🔍 Cek HPP & Profit terkumpul\n• 🛒 Saran restock berdasarkan pola penjualan\n• 📊 Analisa tren penjualan (bulanan/kuartal)\n• 🎯 Prediksi konsumen yang akan order\n• 💵 Audit uang masuk & deteksi selisih\n• 🏥 Cek kesehatan keuangan\n\n**Dokumen:**\n• 📝 Penawaran • 📄 MOU\n• 📄 Kontrak Kerja Karyawan\n\n**Data Cepat:**\n• 💰 Penjualan hari/minggu/bulan\n• 👥 Per sales • 📋 Piutang\n• 📦 Stok • ⚠️ Stok rendah\n\n📢 Tab **Broadcast** untuk kirim promo!'
+          : 'Halo! 👋 Saya **Asisten Data Razkindo**.\n\nKlik tombol cepat atau tanya apa saja:\n• 💰 Penjualan hari/minggu/bulan\n• 👥 Penjualan per sales\n• 📋 Piutang & konsumen\n• 📦 Stok produk\n• 📝 Buat penawaran\n• 📄 Buat MOU\n• 📄 Buat Kontrak Kerja\n\n📢 Klik tab **Broadcast** untuk kirim promo!'
       }]);
     }
   }, [isOpen, messages.length, activeTab]);
-
-  // Auto-TTS on new assistant message
-  const ttsEnabledRef = useRef(ttsEnabled);
-  ttsEnabledRef.current = ttsEnabled;
-
-  useEffect(() => {
-    if (ttsEnabledRef.current && messages.length > 0) {
-      const lastMsg = messages[messages.length - 1];
-      if (lastMsg?.role === 'assistant') {
-        handleTTS(lastMsg.content);
-      }
-    }
-  }, [messages.length]);
-
-  const handleTTS = async (text: string) => {
-    // Stop any current playback
-    if (currentAudioRef.current) {
-      currentAudioRef.current.pause();
-      currentAudioRef.current = null;
-      setPlayingId(null);
-    }
-
-    // Strip markdown for speech
-    const cleanText = text
-      .replace(/\*\*(.*?)\*\*/g, '$1')
-      .replace(/[📊📈💰📦📋⚠️🟢🔴🤖👤📝✅⏳📰🏷️]/g, '')
-      .replace(/---/g, '')
-      .replace(/\n{2,}/g, '. ')
-      .replace(/\n/g, ', ')
-      .trim()
-      .slice(0, 1000);
-
-    if (!cleanText) return;
-
-    try {
-      const idx = messages.findIndex(m => m.content === text);
-      setPlayingId(idx >= 0 ? idx : -1);
-
-      const res = await fetch('/api/ai/tts?XTransformPort=3000', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-        body: JSON.stringify({ text: cleanText, voice: 'tongtong', speed: 1.0 })
-      });
-
-      if (!res.ok) throw new Error('TTS failed');
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      currentAudioRef.current = audio;
-      audio.onended = () => { setPlayingId(null); URL.revokeObjectURL(url); };
-      audio.onerror = () => { setPlayingId(null); URL.revokeObjectURL(url); };
-      audio.play().catch(() => setPlayingId(null));
-    } catch {
-      setPlayingId(null);
-    }
-  };
-
-  const stopTTS = () => {
-    if (currentAudioRef.current) {
-      currentAudioRef.current.pause();
-      currentAudioRef.current = null;
-    }
-    setPlayingId(null);
-  };
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || loading) return;
@@ -213,7 +159,7 @@ export default function AIChatPanel() {
 
     try {
       setLoadingType(isSuperAdmin && isFinancialAnalysis(userMsg) ? 'financial' : 'general');
-      const data = await apiFetch<{ success: boolean; isQuotation?: boolean; isMou?: boolean; isFinancial?: boolean; reply: string; error?: string }>('/api/ai/chat', {
+      const data = await apiFetch<{ success: boolean; isQuotation?: boolean; isMou?: boolean; isEmployeeContract?: boolean; isFinancial?: boolean; reply: string; error?: string }>('/api/ai/chat', {
         method: 'POST',
         body: JSON.stringify({ message: userMsg, history: messages }),
       });
@@ -235,6 +181,14 @@ export default function AIChatPanel() {
           }
           openMouDialog(parsed.partnerName);
           setMessages(prev => [...prev, { role: 'assistant', content: '📄 Silakan isi form MOU di dialog yang terbuka.' }]);
+        } else if (data.isEmployeeContract) {
+          let parsed: any;
+          try { parsed = JSON.parse(data.reply); } catch {
+            setMessages(prev => [...prev, { role: 'assistant', content: '⚠️ Format kontrak kerja gagal.' }]);
+            return;
+          }
+          openContractDialog(parsed.employeeName);
+          setMessages(prev => [...prev, { role: 'assistant', content: '📄 Silakan isi form kontrak kerja di dialog yang terbuka.' }]);
         } else {
           setMessages(prev => [...prev, { role: 'assistant', content: data.reply }]);
         }
@@ -730,6 +684,270 @@ export default function AIChatPanel() {
     }
   };
 
+  // ============ EMPLOYEE CONTRACT ============
+
+  const openContractDialog = async (employeeName: string) => {
+    try {
+      const data = await apiFetch('/api/ai/employee-contract', {
+        method: 'POST',
+        body: JSON.stringify({ employeeName }),
+      }) as any;
+      if (data.success) {
+        setContractData(data);
+        setContractEmployee(employeeName);
+        if (data.employee) {
+          setContractPosition(data.employee.position || '');
+          setContractDepartment(data.employee.department || '');
+          setContractSalary(data.employee.salary?.toString() || '');
+          setContractWorkLocation(data.employee.workLocation || '');
+        }
+        setContractStartDate(new Date().toISOString().split('T')[0]);
+        setContractEndDate('');
+        setShowContract(true);
+      }
+    } catch { /* ignore */ }
+  };
+
+  const generateContractPDF = async () => {
+    if (!contractEmployee.trim()) { toast.error('Nama karyawan wajib diisi'); return; }
+    if (!contractPosition.trim()) { toast.error('Jabatan wajib diisi'); return; }
+    if (!contractSalary.trim()) { toast.error('Gaji wajib diisi'); return; }
+    if (!contractStartDate) { toast.error('Tanggal mulai wajib diisi'); return; }
+    if (!contractEndDate && contractType === 'PKWT') { toast.error('Tanggal berakhir wajib diisi untuk PKWT'); return; }
+
+    setContractGenerating(true);
+    try {
+      const { default: jsPDF } = await import('jspdf');
+      const doc = new jsPDF('p', 'mm', 'a4');
+      const company = contractData?.company || {};
+      const contractNo = contractData?.contractNo || `KONTRAK-${Date.now().toString(36).toUpperCase()}`;
+      const contractDateStr = contractData?.date || new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+
+      // Try to load logo
+      let logoData: string | null = null;
+      try {
+        if (company.logo) {
+          const res = await fetch(company.logo);
+          const blob = await res.blob();
+          logoData = await new Promise<string | null>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = () => resolve(null);
+            reader.readAsDataURL(blob);
+          });
+        }
+      } catch { /* no logo */ }
+
+      const pw = doc.internal.pageSize.getWidth();
+      const ph = doc.internal.pageSize.getHeight();
+      const margin = 20;
+      const centerX = pw / 2;
+      const contentWidth = pw - margin * 2;
+      let y = 15;
+
+      // Helper: write article with proper text wrapping
+      const writeArticle = (title: string, content: string) => {
+        // Check if we need a new page
+        if (y > ph - 50) {
+          doc.setFontSize(7); doc.setTextColor(150);
+          doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')} | Dokumen ini dibuat oleh sistem Razkindo ERP`, pw / 2, ph - 10, { align: 'center' });
+          doc.addPage();
+          y = 20;
+        }
+        doc.setFontSize(10); doc.setFont('helvetica', 'bold'); doc.setTextColor(0);
+        doc.text(title, margin, y);
+        y += 6;
+        doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(30, 41, 59);
+        const lines = doc.splitTextToSize(content, contentWidth);
+        doc.text(lines, margin, y);
+        y += lines.length * 4.5 + 6;
+      };
+
+      // ── HEADER ──
+      if (logoData) {
+        try { doc.addImage(logoData, 'PNG', centerX - 12.5, y, 25, 25); } catch { /* skip */ }
+        y += 27;
+      }
+      doc.setFontSize(16); doc.setFont('helvetica', 'bold'); doc.setTextColor(15, 23, 42);
+      doc.text(company.name || 'Razkindo Group', centerX, y, { align: 'center' });
+      y += 5;
+      doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(100, 116, 139);
+      if (company.address) { doc.text(company.address, centerX, y, { align: 'center', maxWidth: contentWidth }); y += 4; }
+      if (company.phone) { doc.text(`Tel: ${company.phone}`, centerX, y, { align: 'center' }); y += 4; }
+      if (company.email) { doc.text(`Email: ${company.email}`, centerX, y, { align: 'center' }); y += 2; }
+
+      y = Math.max(y, logoData ? 52 : 35);
+
+      // Accent bar
+      doc.setFillColor(5, 150, 105);
+      doc.rect(margin, y, contentWidth, 1.5, 'F');
+      y += 8;
+
+      // ── TITLE ──
+      doc.setFontSize(18); doc.setFont('helvetica', 'bold'); doc.setTextColor(15, 23, 42);
+      doc.text('KONTRAK KERJA KARYAWAN', centerX, y, { align: 'center' });
+      y += 6;
+      doc.setFontSize(10); doc.setFont('helvetica', 'italic'); doc.setTextColor(100, 116, 139);
+      doc.text('(Perjanjian Kerja)', centerX, y, { align: 'center' });
+      y += 8;
+
+      // Contract number & date
+      doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(71, 85, 105);
+      doc.text(`No: ${contractNo}`, margin, y);
+      doc.text(`Tanggal: ${contractDateStr}`, pw - margin, y, { align: 'right' });
+      y += 10;
+
+      // ── PREAMBLE ──
+      doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(30, 41, 59);
+      const preambleText = `Pada hari ini, ${contractDateStr}, yang bertanda tangan di bawah ini:`;
+      const preambleLines = doc.splitTextToSize(preambleText, contentWidth);
+      doc.text(preambleLines, margin, y);
+      y += preambleLines.length * 4.5 + 6;
+
+      // Pihak Pertama (Company)
+      doc.setFont('helvetica', 'bold'); doc.setTextColor(15, 23, 42);
+      doc.text('I. PIHAK PERTAMA (Perusahaan):', margin, y);
+      y += 5;
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(30, 41, 59);
+      doc.text(`Nama Perusahaan: ${company.name || 'Razkindo Group'}`, margin + 5, y); y += 4.5;
+      if (company.address) { doc.text(`Alamat: ${company.address}`, margin + 5, y); y += 4.5; }
+      if (company.phone) { doc.text(`Telepon: ${company.phone}`, margin + 5, y); y += 4.5; }
+      doc.text('Jabatan: Direktur', margin + 5, y); y += 8;
+
+      // Pihak Kedua (Employee)
+      doc.setFont('helvetica', 'bold'); doc.setTextColor(15, 23, 42);
+      doc.text('II. PIHAK KEDUA (Karyawan):', margin, y);
+      y += 5;
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(30, 41, 59);
+      doc.text(`Nama: ${contractEmployee}`, margin + 5, y); y += 4.5;
+      doc.text(`Jabatan: ${contractPosition}`, margin + 5, y); y += 4.5;
+      if (contractDepartment) { doc.text(`Departemen: ${contractDepartment}`, margin + 5, y); y += 4.5; }
+      y += 6;
+
+      // Opening
+      doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(30, 41, 59);
+      const openingText = `Selanjutnya disebut sebagai Para Pihak, sepakat untuk mengadakan Perjanjian Kerja dengan ketentuan-ketentuan sebagai berikut:`;
+      const openingLines = doc.splitTextToSize(openingText, contentWidth);
+      doc.text(openingLines, margin, y);
+      y += openingLines.length * 4.5 + 8;
+
+      // ── PASAL 1 - JABATAN DAN TUGAS ──
+      writeArticle(
+        'Pasal 1 - Jabatan dan Tugas',
+        `Pihak Kedua diangkat pada jabatan ${contractPosition}${contractDepartment ? ` di Departemen ${contractDepartment}` : ''} pada Perusahaan Pihak Pertama. Pihak Kedua bertanggung jawab melaksanakan tugas-tugas yang berkaitan dengan jabatannya sesuai dengan uraian pekerjaan yang ditetapkan oleh Pihak Pertama. Pihak Pertama berhak mengubah jabatan dan/atau penempatan Pihak Kedua sesuai dengan kebutuhan perusahaan dengan pemberitahuan tertulis.`
+      );
+
+      // ── PASAL 2 - GAJI DAN TUNJANGAN ──
+      const salaryNum = parseInt(contractSalary) || 0;
+      const salaryFormatted = salaryNum > 0 ? `Rp ${salaryNum.toLocaleString('id-ID')}` : contractSalary;
+      writeArticle(
+        'Pasal 2 - Gaji dan Tunjangan',
+        `Pihak Pertama akan membayar gaji kepada Pihak Kedua sebesar ${salaryFormatted} (${contractType === 'PKWTT' ? 'untuk kontrak kerja waktu tidak tertentu' : 'untuk kontrak kerja waktu tertentu'}) per bulan, dibayarkan pada akhir setiap bulan kerja. Gaji tersebut sudah termasuk tunjangan yang ditetapkan oleh perusahaan. Pihak Pertama berhak melakukan penyesuaian gaji sesuai dengan evaluasi kinerja dan kebijakan perusahaan. Pembayaran gaji dilakukan melalui transfer bank ke rekening Pihak Kedua.`
+      );
+
+      // ── PASAL 3 - JAM KERJA ──
+      writeArticle(
+        'Pasal 3 - Jam Kerja',
+        `Pihak Kedua wajib bekerja selama 40 (empat puluh) jam per minggu dengan jam kerja ${contractWorkHours || '08:00 - 17:00 WIB'}, Senin sampai Jumat, atau sesuai dengan jadwal yang ditetapkan oleh Pihak Pertama. Pihak Pertama berhak mengatur jam kerja lembur sesuai dengan ketentuan perundang-undangan yang berlaku. Istirahat makan diberikan selama 1 (satu) jam setiap hari kerja.`
+      );
+
+      // ── PASAL 4 - CUTI ──
+      writeArticle(
+        'Pasal 4 - Cuti',
+        `Pihak Kedua berhak mendapatkan cuti tahunan selama 12 (dua belas) hari kerja setelah bekerja selama 12 (dua belas) bulan berturut-turut. Selain cuti tahunan, Pihak Kedua juga berhak atas cuti sakit, cuti melahirkan, cuti karena alasan penting, dan cuti lainnya sesuai dengan ketentuan perundang-undangan yang berlaku. Pengambilan cuti tahunan harus dengan persetujuan Pihak Pertama dan diajukan minimal 3 (tiga) hari kerja sebelumnya.`
+      );
+
+      // ── PASAL 5 - MASA COBA ──
+      writeArticle(
+        'Pasal 5 - Masa Percobaan',
+        `Pihak Kedua akan menjalani masa percobaan selama ${contractProbationPeriod || '3 (tiga) bulan'} terhitung sejak tanggal mulai bekerja. Selama masa percobaan, Pihak Pertama berhak mengakhiri perjanjian kerja ini tanpa pemberitahuan terlebih dahulu apabila Pihak Kedua tidak memenuhi standar kinerja yang ditetapkan. Selama masa percobaan, gaji yang dibayarkan adalah sesuai dengan ketentuan pada Pasal 2. Apabila masa percobaan berakhir dan tidak ada pemberitahuan tertulis dari Pihak Pertama, maka Pihak Kedua dinyatakan lulus masa percobaan.`
+      );
+
+      // ── PASAL 6 - PENGHENTIAN ──
+      const terminationAddon = contractType === 'PKWT'
+        ? `Kontrak kerja ini berakhir pada tanggal ${contractEndDate}. Pihak Pertama atau Pihak Kedua dapat mengakhiri perjanjian ini sebelum waktu yang ditentukan dengan pemberitahuan tertulis minimal 30 (tiga puluh) hari kalender sebelumnya. `
+        : `Perjanjian kerja ini berlaku untuk waktu yang tidak tertentu (PKWTT). Pengakhiran perjanjian kerja dilakukan sesuai dengan ketentuan perundang-undangan ketenagakerjaan yang berlaku. `;
+      writeArticle(
+        'Pasal 6 - Pengakhiran Perjanjian',
+        `${terminationAddon}Pengakhiran perjanjian kerja dapat dilakukan oleh Pihak Pertama apabila Pihak Kedua melakukan pelanggaran berat terhadap perjanjian kerja, peraturan perusahaan, atau perjanjian kerja bersama. Pihak Kedua yang mengundurkan diri wajib memberikan pemberitahuan tertulis minimal 30 (tiga puluh) hari kalender sebelumnya.`
+      );
+
+      // ── PASAL 7 - KERAHASIAAN ──
+      writeArticle(
+        'Pasal 7 - Kerahasiaan',
+        `Pihak Kedua wajib menjaga kerahasiaan seluruh informasi, data, dokumen, dan segala hal yang berkaitan dengan kegiatan usaha Pihak Pertama yang bersifat rahasia. Kewajiban kerahasiaan ini tetap berlaku meskipun perjanjian kerja ini telah berakhir. Pelanggaran terhadap ketentuan kerahasiaan ini akan dikenakan sanksi sesuai dengan peraturan perusahaan dan/atau perundang-undangan yang berlaku.`
+      );
+
+      // ── PASAL 8 - PENYELESAIAN PERSELISIHAN ──
+      writeArticle(
+        'Pasal 8 - Penyelesaian Perselisihan',
+        `Apabila terjadi perselisihan antara Para Pihak dalam pelaksanaan perjanjian kerja ini, maka akan diselesaikan secara musyawarah untuk mufakat. Apabila musyawarah tidak menghasilkan kesepakatan, maka perselisihan akan diselesaikan melalui prosedur penyelesaian perselisihan hubungan industrial sesuai dengan ketentuan perundang-undangan yang berlaku di Republik Indonesia.`
+      );
+
+      // ── PASAL 9 - FORCE MAJEURE ──
+      writeArticle(
+        'Pasal 9 - Force Majeure',
+        `Kegagalan atau keterlambatan salah satu Pihak dalam melaksanakan kewajibannya berdasarkan perjanjian ini yang disebabkan oleh keadaan di luar kehendak Pihak yang bersangkutan (force majeure), termasuk namun tidak terbatas pada bencana alam, pandemi, perang, atau kebijakan pemerintah, tidak dianggap sebagai pelanggaran terhadap perjanjian ini. Pihak yang terkena force majeure wajib memberitahukan secara tertulis kepada Pihak lainnya dalam waktu 7 (tujuh) hari kalender.`
+      );
+
+      // ── PASAL 10 - PENUTUP ──
+      writeArticle(
+        'Pasal 10 - Penutup',
+        `Perjanjian kerja ini dibuat dalam rangkap 2 (dua) yang masing-masing mempunyai kekuatan hukum yang sama. Perjanjian kerja ini mulai berlaku sejak tanggal ditandatangani oleh Para Pihak. Hal-hal yang belum diatur dalam perjanjian ini akan diatur kemudian melalui perjanjian tambahan atau sesuai dengan peraturan perusahaan dan perundang-undangan yang berlaku.`
+      );
+
+      // ── CLOSING ──
+      if (y > ph - 60) {
+        doc.setFontSize(7); doc.setTextColor(150);
+        doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')} | Dokumen ini dibuat oleh sistem Razkindo ERP`, pw / 2, ph - 10, { align: 'center' });
+        doc.addPage();
+        y = 20;
+      }
+
+      y += 4;
+      doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(30, 41, 59);
+      const closingText = 'Demikian perjanjian kerja ini dibuat dengan penuh kesadaran tanpa adanya paksaan dari pihak manapun, untuk dapat dilaksanakan dengan penuh tanggung jawab.';
+      const closingLines = doc.splitTextToSize(closingText, contentWidth);
+      doc.text(closingLines, margin, y);
+      y += closingLines.length * 4.5 + 10;
+
+      // ── SIGNATURES ──
+      y = Math.max(y, 190);
+
+      const sigLeftX = margin + 5;
+      const sigRightX = pw / 2 + 15;
+
+      doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(15, 23, 42);
+      doc.text('Pihak Pertama,', sigLeftX + 10, y);
+      doc.text('Pihak Kedua,', sigRightX + 10, y);
+
+      doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(100, 116, 139);
+      doc.text(company.name || 'Razkindo Group', sigLeftX + 10, y + 4);
+      doc.text(contractEmployee, sigRightX + 10, y + 4);
+
+      // Signature lines
+      doc.setDrawColor(0); doc.setLineWidth(0.3);
+      doc.line(sigLeftX, y + 26, sigLeftX + 55, y + 26);
+      doc.line(sigRightX, y + 26, sigRightX + 55, y + 26);
+
+      doc.setFontSize(8); doc.setTextColor(15, 23, 42);
+      doc.text('Direktur', sigLeftX + 15, y + 31);
+      doc.text(contractEmployee, sigRightX + 10, y + 31);
+
+      // ── FOOTER ──
+      doc.setFontSize(7); doc.setTextColor(150);
+      doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')} | Dokumen ini dibuat oleh sistem Razkindo ERP`, pw / 2, ph - 10, { align: 'center' });
+
+      doc.save(`Kontrak_Kerja_${contractEmployee.replace(/\s+/g, '_')}_${contractNo}.pdf`);
+      setMessages(prev => [...prev, { role: 'assistant', content: `✅ Kontrak kerja untuk **${contractEmployee}** berhasil dibuat dan didownload!` }]);
+      setShowContract(false);
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal membuat kontrak kerja');
+    } finally {
+      setContractGenerating(false);
+    }
+  };
+
   // ============ BROADCAST ============
 
   const loadBroadcastTargets = async () => {
@@ -836,8 +1054,8 @@ export default function AIChatPanel() {
                   <Bot className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="font-semibold text-sm">{isSuperAdmin ? 'Financial Analyst' : 'Asisten Data'}</p>
-                  <p className="text-xs text-white/70">{isSuperAdmin ? 'AI Keuangan + Analisa + WhatsApp' : 'AI-Powered + WhatsApp'}</p>
+                  <p className="font-semibold text-sm">{isSuperAdmin ? 'Asisten Razkindo' : 'Asisten Data'}</p>
+                  <p className="text-xs text-white/70">{isSuperAdmin ? 'Analisis Data + Dokumen + WhatsApp' : 'Data + WhatsApp'}</p>
                 </div>
               </div>
               <div className="flex items-center gap-1">
@@ -876,20 +1094,10 @@ export default function AIChatPanel() {
                 {messages.map((msg, idx) => (
                   <div key={idx} className={cn("flex gap-1.5", msg.role === 'user' ? 'justify-end' : 'justify-start')}>
                     <div className={cn(
-                      "max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed relative group",
+                      "max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed",
                       msg.role === 'user' ? "bg-primary text-primary-foreground rounded-br-md" : "bg-muted rounded-bl-md"
                     )}>
                       {msg.role === 'assistant' ? renderMessageContent(msg.content) : msg.content}
-                      {/* TTS play button on assistant messages */}
-                      {msg.role === 'assistant' && (
-                        <button
-                          onClick={() => playingId === idx ? stopTTS() : handleTTS(msg.content)}
-                          className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-background border shadow-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-muted"
-                          title={playingId === idx ? 'Stop' : 'Putar suara'}
-                        >
-                          {playingId === idx ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
-                        </button>
-                      )}
                     </div>
                   </div>
                 ))}
@@ -903,7 +1111,7 @@ export default function AIChatPanel() {
                           <span className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                         </div>
                         <span className="text-xs text-muted-foreground ml-1">
-                          {loadingType === 'financial' ? '📊 Mengambil & menganalisa data keuangan...' : 'Berpikir...'}
+                          {loadingType === 'financial' ? '📊 Menganalisa data...' : 'Mengambil data...'}
                         </span>
                       </div>
                     </div>
@@ -927,7 +1135,7 @@ export default function AIChatPanel() {
               )}
 
               {/* Input */}
-              <div className="p-3 border-t flex-shrink-0 space-y-2">
+              <div className="p-3 border-t flex-shrink-0">
                 <div className="flex items-center gap-2">
                   <input
                     ref={inputRef}
@@ -946,13 +1154,6 @@ export default function AIChatPanel() {
                   >
                     <Send className="w-4 h-4" />
                   </button>
-                </div>
-                <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                    <Switch checked={ttsEnabled} onCheckedChange={setTtsEnabled} className="scale-75" />
-                    <span className="text-[10px] text-muted-foreground">🔊 Auto TTS</span>
-                  </label>
-                  <span className="text-[10px] text-muted-foreground">Powered by Z.AI SDK</span>
                 </div>
               </div>
             </>
@@ -1301,6 +1502,102 @@ export default function AIChatPanel() {
                 <Button onClick={generateMouPDF} disabled={mouGenerating || !mouPartner.trim()} className="flex-1 bg-emerald-600 hover:bg-emerald-700">
                   {mouGenerating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
                   {mouGenerating ? 'Membuat...' : 'Download PDF'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Employee Contract Dialog */}
+      {showContract && contractData && (
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4" onClick={() => setShowContract(false)}>
+          <div className="bg-background rounded-2xl w-full max-w-lg max-h-[90dvh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="font-semibold text-lg">📄 Buat Kontrak Kerja</h3>
+              <button onClick={() => setShowContract(false)} className="w-8 h-8 rounded-full hover:bg-muted flex items-center justify-center"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <Label className="text-sm font-medium">Nama Karyawan</Label>
+                <Input value={contractEmployee} onChange={e => setContractEmployee(e.target.value)} placeholder="Nama karyawan..." className="mt-1" />
+                {contractData.employee && <p className="text-xs text-muted-foreground mt-1">📱 {contractData.employee.phone || '-'} | 📍 {contractData.employee.address || '-'}</p>}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-sm font-medium">No. Kontrak</Label>
+                  <Input value={contractData.contractNo} readOnly className="mt-1 bg-muted/50" />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Tanggal</Label>
+                  <Input value={contractData.date} readOnly className="mt-1 bg-muted/50" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-sm font-medium">Jabatan</Label>
+                  <Input value={contractPosition} onChange={e => setContractPosition(e.target.value)} placeholder="Jabatan karyawan..." className="mt-1" />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Departemen</Label>
+                  <Input value={contractDepartment} onChange={e => setContractDepartment(e.target.value)} placeholder="Departemen..." className="mt-1" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-sm font-medium">Gaji Pokok (Rp)</Label>
+                  <Input type="number" min="0" value={contractSalary} onChange={e => setContractSalary(e.target.value)} placeholder="0" className="mt-1" />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Jenis Kontrak</Label>
+                  <select
+                    className="flex-1 h-9 w-full rounded-md border bg-background px-3 text-sm mt-1"
+                    value={contractType}
+                    onChange={e => setContractType(e.target.value)}
+                  >
+                    <option value="PKWTT">PKWTT (Waktu Tidak Tertentu)</option>
+                    <option value="PKWT">PKWT (Waktu Tertentu)</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-sm font-medium">Tanggal Mulai</Label>
+                  <Input type="date" value={contractStartDate} onChange={e => setContractStartDate(e.target.value)} className="mt-1" />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Tanggal Berakhir <span className="text-xs text-muted-foreground font-normal">(PKWT)</span></Label>
+                  <Input type="date" value={contractEndDate} onChange={e => setContractEndDate(e.target.value)} className="mt-1" disabled={contractType === 'PKWTT'} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-sm font-medium">Jam Kerja</Label>
+                  <Input value={contractWorkHours} onChange={e => setContractWorkHours(e.target.value)} placeholder="08:00 - 17:00" className="mt-1" />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Masa Percobaan</Label>
+                  <select
+                    className="flex-1 h-9 w-full rounded-md border bg-background px-3 text-sm mt-1"
+                    value={contractProbationPeriod}
+                    onChange={e => setContractProbationPeriod(e.target.value)}
+                  >
+                    <option value="1 Bulan">1 Bulan</option>
+                    <option value="2 Bulan">2 Bulan</option>
+                    <option value="3 Bulan">3 Bulan</option>
+                    <option value="6 Bulan">6 Bulan</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm font-medium">Lokasi Kerja</Label>
+                <Input value={contractWorkLocation} onChange={e => setContractWorkLocation(e.target.value)} placeholder="Alamat lokasi kerja..." className="mt-1" />
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setShowContract(false)} className="flex-1">Batal</Button>
+                <Button onClick={generateContractPDF} disabled={contractGenerating || !contractEmployee.trim() || !contractPosition.trim()} className="flex-1 bg-emerald-600 hover:bg-emerald-700">
+                  {contractGenerating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+                  {contractGenerating ? 'Membuat...' : 'Download PDF'}
                 </Button>
               </div>
             </div>
