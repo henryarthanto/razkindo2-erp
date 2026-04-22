@@ -16,7 +16,8 @@ import {
   HandCoins,
   Wallet,
   Check,
-  Receipt
+  Receipt,
+  Building2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -445,7 +446,7 @@ export default function CourierDashboard() {
 // ============== PENDING DELIVERY CARD (with payment collection) ==============
 export function PendingDeliveryCard({ transaction, courier, queryClient }: { transaction: Transaction; courier: User; queryClient: QueryClient }) {
   const [deliverOpen, setDeliverOpen] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'piutang' | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer' | 'piutang' | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
 
   const remaining = transaction.remainingAmount || transaction.total;
@@ -456,16 +457,19 @@ export function PendingDeliveryCard({ transaction, courier, queryClient }: { tra
   // Deliver mutation
   const deliverMutation = useMutation({
     mutationFn: async (collectPayment: boolean) => {
-      const isCash = paymentMethod === 'cash';
-      const amount = isCash && paymentAmount ? Number(paymentAmount) : null;
       const body: any = {
         transactionId: transaction.id,
         courierId: courier.id,
       };
-      if (collectPayment && paymentMethod && amount && amount > 0) {
-        body.paymentMethod = isCash ? 'cash' : 'piutang';
-        body.amount = amount;
+      if (collectPayment && paymentMethod && paymentMethod !== 'piutang') {
+        // Cash and transfer: record actual payment
+        const amount = paymentAmount ? Number(paymentAmount) : 0;
+        if (amount > 0) {
+          body.paymentMethod = paymentMethod;
+          body.amount = amount;
+        }
       }
+      // For piutang: just complete delivery without payment — receivable already exists
       return apiFetch<{ commission?: number }>('/api/courier/deliver', {
         method: 'PATCH',
         body: JSON.stringify(body)
@@ -478,6 +482,7 @@ export function PendingDeliveryCard({ transaction, courier, queryClient }: { tra
       setPaymentAmount('');
       queryClient.invalidateQueries({ queryKey: ['courier-dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions-deliveries'] });
       queryClient.invalidateQueries({ queryKey: ['receivables'] });
       queryClient.invalidateQueries({ queryKey: ['sales-dashboard'] });
     },
@@ -590,30 +595,38 @@ export function PendingDeliveryCard({ transaction, courier, queryClient }: { tra
             {remaining > 0 && !paymentMethod ? (
               <>
                 <p className="text-sm font-medium">Metode pembayaran dari konsumen?</p>
-                <div className="flex gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   <Button 
                     className="flex-1" 
                     onClick={() => { setPaymentMethod('cash'); setPaymentAmount(String(remaining)); }}
-                    variant={paymentMethod === 'cash' ? 'default' : 'outline'}
+                    variant="outline"
                   >
-                    <Banknote className="w-4 h-4 mr-2" />
+                    <Banknote className="w-4 h-4 mr-1" />
                     Cash
                   </Button>
                   <Button 
                     className="flex-1" 
-                    onClick={() => { setPaymentMethod('piutang'); setPaymentAmount(String(remaining)); }}
-                    variant={paymentMethod === 'piutang' ? 'default' : 'outline'}
+                    onClick={() => { setPaymentMethod('transfer'); setPaymentAmount(String(remaining)); }}
+                    variant="outline"
                   >
-                    <Receipt className="w-4 h-4 mr-2" />
+                    <Building2 className="w-4 h-4 mr-1" />
+                    Transfer
+                  </Button>
+                  <Button 
+                    className="flex-1" 
+                    onClick={() => setPaymentMethod('piutang')}
+                    variant="outline"
+                  >
+                    <Receipt className="w-4 h-4 mr-1" />
                     Piutang
                   </Button>
                 </div>
               </>
             ) : paymentMethod === 'cash' ? (
               <>
-                <Alert className="border-amber-300 bg-amber-50">
+                <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/30">
                   <Banknote className="h-4 w-4 text-amber-600" />
-                  <AlertDescription className="text-amber-800 text-sm">
+                  <AlertDescription className="text-amber-800 dark:text-amber-200 text-sm">
                     Konsumen membayar <strong>{formatCurrency(remaining)}</strong> secara cash. Uang akan masuk ke saldo cash Anda.
                   </AlertDescription>
                 </Alert>
@@ -649,12 +662,52 @@ export function PendingDeliveryCard({ transaction, courier, queryClient }: { tra
                   </Button>
                 </div>
               </>
+            ) : paymentMethod === 'transfer' ? (
+              <>
+                <Alert className="border-blue-300 bg-blue-50 dark:bg-blue-950/30">
+                  <Building2 className="h-4 w-4 text-blue-600" />
+                  <AlertDescription className="text-blue-800 dark:text-blue-200 text-sm">
+                    Konsumen membayar <strong>{formatCurrency(remaining)}</strong> via transfer bank. Pembayaran akan dicatat sebagai transfer.
+                  </AlertDescription>
+                </Alert>
+
+                <div className="space-y-2">
+                  <Label>Jumlah Transfer Diterima</Label>
+                  <Input
+                    type="number"
+                    value={paymentAmount}
+                    onChange={e => setPaymentAmount(e.target.value)}
+                    max={remaining}
+                    placeholder={String(remaining)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Sisa tagihan: {formatCurrency(remaining)}
+                  </p>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setPaymentMethod(null)}
+                  >
+                    Kembali
+                  </Button>
+                  <Button
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                    onClick={() => deliverMutation.mutate(true)}
+                    disabled={deliverMutation.isPending || !paymentAmount || Number(paymentAmount) <= 0}
+                  >
+                    {deliverMutation.isPending ? 'Memproses...' : 'Transfer & Selesai'}
+                  </Button>
+                </div>
+              </>
             ) : paymentMethod === 'piutang' ? (
               <>
-                <Alert className="border-red-300 bg-red-50">
+                <Alert className="border-red-300 bg-red-50 dark:bg-red-950/30">
                   <Receipt className="h-4 w-4 text-red-600" />
-                  <AlertDescription className="text-red-800 text-sm">
-                    Konsumen belum membayar. <strong>{formatCurrency(remaining)}</strong> akan dicatat sebagai <strong>piutang</strong> dan perlu ditagih nanti.
+                  <AlertDescription className="text-red-800 dark:text-red-200 text-sm">
+                    Konsumen belum membayar. <strong>{formatCurrency(remaining)}</strong> akan tetap tercatat sebagai <strong>piutang</strong> dan perlu ditagih nanti.
                   </AlertDescription>
                 </Alert>
 
@@ -668,10 +721,10 @@ export function PendingDeliveryCard({ transaction, courier, queryClient }: { tra
                   </Button>
                   <Button
                     className="flex-1 bg-red-600 hover:bg-red-700 text-white"
-                    onClick={() => deliverMutation.mutate(true)}
+                    onClick={() => deliverMutation.mutate(false)}
                     disabled={deliverMutation.isPending}
                   >
-                    {deliverMutation.isPending ? 'Memproses...' : 'Piutang & Selesai'}
+                    {deliverMutation.isPending ? 'Memproses...' : 'Selesai (Piutang)'}
                   </Button>
                 </div>
               </>

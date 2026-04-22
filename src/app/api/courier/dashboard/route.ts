@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
       id, invoice_no, total, paid_amount, remaining_amount, payment_method, payment_status,
       transaction_date, delivery_address, delivery_distance, courier_commission, notes,
       customer:customers(id, name, distance, phone), unit:units(id, name)
-    `).eq('courier_id', courierId).eq('type', 'sale').eq('status', 'approved').eq('payment_status', 'unpaid').is('delivered_at', null).order('created_at', { ascending: false }).limit(10);
+    `).eq('courier_id', courierId).eq('type', 'sale').neq('status', 'cancelled').is('delivered_at', null).order('created_at', { ascending: false }).limit(10);
 
     return NextResponse.json({
       dashboard: {

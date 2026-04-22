@@ -16,11 +16,35 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { data: config } = await db
+    let { data: config } = await db
       .from('cashback_config')
       .select('*')
       .eq('is_active', true)
       .maybeSingle();
+
+    // If no active config exists, seed a default one
+    if (!config) {
+      try {
+        const { data: newConfig } = await db
+          .from('cashback_config')
+          .insert({
+            type: 'percentage',
+            value: 0,
+            max_cashback: 0,
+            min_order: 0,
+            referral_bonus_type: 'nominal',
+            referral_bonus_value: 0,
+            is_active: true,
+          })
+          .select()
+          .single();
+        if (newConfig) {
+          config = newConfig;
+        }
+      } catch (seedErr) {
+        console.error('Failed to seed default cashback config:', seedErr);
+      }
+    }
 
     // Also get all configs for reference
     const { data: allConfigs } = await db

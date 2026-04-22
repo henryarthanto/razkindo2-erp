@@ -100,7 +100,11 @@ const STATUS_CONFIG: Record<TaskStatus, { label: string; className: string }> = 
 
 const isOverdue = (dueDate?: string | null, status?: TaskStatus): boolean => {
   if (!dueDate || status === 'completed' || status === 'cancelled') return false;
-  return new Date(dueDate) < new Date();
+  const now = new Date();
+  const due = new Date(dueDate);
+  // Set due to end of day in local timezone for consistent overdue check
+  due.setHours(23, 59, 59, 999);
+  return now > due;
 };
 
 // Tab options config for mobile dropdown
@@ -339,6 +343,7 @@ export default function SalesTaskDashboard() {
       });
       toast.success(`Tugas "${task.title}" dimulai`);
       queryClient.invalidateQueries({ queryKey: ['my-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['my-tasks-popup'] });
     } catch (err: any) {
       toast.error(err.message || 'Gagal memulai tugas');
     } finally {
@@ -374,6 +379,7 @@ export default function SalesTaskDashboard() {
       setReportNote('');
       setReportEvidence('');
       queryClient.invalidateQueries({ queryKey: ['my-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['my-tasks-popup'] });
     } catch (err: any) {
       toast.error(err.message || 'Gagal mengirim laporan');
     } finally {

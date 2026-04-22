@@ -175,8 +175,6 @@ export async function POST(request: NextRequest) {
         notes: data.notes,
         distance: data.distance || 'near',
         assigned_to_id: data.assignedToId || null,
-        cashback_type: data.cashbackType || 'percentage',
-        cashback_value: data.cashbackValue || 0,
       })
       .select(`
         *,

@@ -76,10 +76,11 @@ export default function SuppliersModule() {
   const [showEditSupplier, setShowEditSupplier] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [showPurchase, setShowPurchase] = useState(false);
+  const [preselectedSupplierId, setPreselectedSupplierId] = useState<string | undefined>(undefined);
   const [showGoodsStatusDialog, setShowGoodsStatusDialog] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<FinanceRequest | null>(null);
   const [activeTab, setActiveTab] = useState('suppliers');
-  const [selectedPurchase, setSelectedPurchase] = useState<Transaction | null>(null);
+  const [purchaseDialogKey, setPurchaseDialogKey] = useState(0);
   
   // Settings query for company name (used in PO/Request PDFs)
   const { data: settingsData } = useQuery({
@@ -679,6 +680,7 @@ export default function SuppliersModule() {
               <DialogContent className="sm:max-w-lg w-[calc(100%-2rem)] max-h-[85dvh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Tambah Supplier</DialogTitle>
+                  <DialogDescription>Isi form di bawah untuk menambahkan supplier baru</DialogDescription>
                 </DialogHeader>
                 <SupplierForm
                   onSuccess={() => {
@@ -771,6 +773,8 @@ export default function SuppliersModule() {
                     size="sm" 
                     className="w-full mt-3"
                     onClick={() => {
+                      setPreselectedSupplierId(s.id);
+                      setPurchaseDialogKey(prev => prev + 1);
                       setShowPurchase(true);
                     }}
                   >
@@ -1067,7 +1071,10 @@ export default function SuppliersModule() {
       </Tabs>
       
       {/* Purchase Dialog */}
-      <Dialog open={showPurchase} onOpenChange={setShowPurchase}>
+      <Dialog open={showPurchase} onOpenChange={(open) => {
+        setShowPurchase(open);
+        if (!open) setPreselectedSupplierId(undefined);
+      }}>
         <DialogContent className="sm:max-w-2xl w-[calc(100%-2rem)] max-h-[85dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Permintaan Pembelian ke Finance</DialogTitle>
@@ -1076,14 +1083,18 @@ export default function SuppliersModule() {
             </DialogDescription>
           </DialogHeader>
           <PurchaseRequestForm
+            key={purchaseDialogKey}
             suppliers={suppliers}
             products={products}
             units={units}
             userId={user?.id || ''}
             unitId={selectedUnitId || user?.unitId || undefined}
+            preselectedSupplierId={preselectedSupplierId}
             onSuccess={() => {
               setShowPurchase(false);
+              setPreselectedSupplierId(undefined);
               queryClient.invalidateQueries({ queryKey: ['finance-requests'] });
+              queryClient.invalidateQueries({ queryKey: ['purchases'] });
             }}
           />
         </DialogContent>

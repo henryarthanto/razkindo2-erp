@@ -93,6 +93,11 @@ export async function PATCH(
     if (data.cashbackType !== undefined) updateData.cashback_type = data.cashbackType;
     if (data.cashbackValue !== undefined) updateData.cashback_value = data.cashbackValue;
 
+    // Only attempt update if there are fields to update
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json({ customer: { ...existingCamel, assignedTo: existingCamel.assignedTo || null } });
+    }
+
     const { data: customer } = await db
       .from('customers')
       .update(updateData)

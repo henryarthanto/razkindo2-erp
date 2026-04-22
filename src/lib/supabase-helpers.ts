@@ -85,10 +85,14 @@ export function mapSelect(select: Record<string, boolean>): string {
 }
 
 /**
- * Generate a CUID-like ID (for compatibility with existing data)
+ * Generate a unique ID for database records.
+ *
+ * Uses crypto.randomUUID() (available in Node.js 19+).
+ * Prisma models use @default(cuid()) but that only works through the Prisma client.
+ * When inserting via Supabase REST API, we must provide the ID manually.
+ * UUID format is compatible with the text-type `id` columns.
  */
 export function generateId(): string {
-  // Use crypto.randomUUID() which is available in Node.js 19+
   return crypto.randomUUID();
 }
 
@@ -109,6 +113,7 @@ export async function createLog(
 ) {
   try {
     await db.from('logs').insert({
+      id: generateId(),
       type: data.type,
       user_id: data.userId || null,
       action: data.action,
@@ -133,6 +138,7 @@ export async function createEvent(
 ) {
   try {
     await db.from('events').insert({
+      id: generateId(),
       type,
       payload: typeof payload === 'string' ? payload : JSON.stringify(payload),
     });

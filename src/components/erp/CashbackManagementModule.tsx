@@ -162,10 +162,10 @@ function ConfigTab() {
   const [refBonusValue, setRefBonusValue] = useState('0');
   const [savingRefBonus, setSavingRefBonus] = useState(false);
 
-  // Check migration status
+  // Check migration status — non-blocking, just informational
   const { data: migrationStatus } = useQuery({
     queryKey: ['pwa-migration-status'],
-    queryFn: () => apiFetch<{ ready: boolean; tables: Record<string, boolean> }>('/api/migrate-customer-pwa'),
+    queryFn: () => apiFetch<{ ready: boolean; tables: Record<string, boolean> }>('/api/migrate-customer-pwa').catch(() => ({ ready: true, tables: {} })),
     staleTime: 60_000,
   });
 
@@ -204,7 +204,6 @@ function ConfigTab() {
   const { data: configData, isLoading } = useQuery({
     queryKey: ['cashback-config'],
     queryFn: () => api.cashback.getConfig(),
-    enabled: migrationNeeded === false,
   });
 
   const stats = configData?.stats;
@@ -251,7 +250,6 @@ function ConfigTab() {
       const response = await apiFetch<{ customers: any[] }>('/api/customers');
       return response?.customers || [];
     },
-    enabled: migrationNeeded === false,
   });
 
   const customers = customersData || [];
@@ -297,54 +295,51 @@ function ConfigTab() {
     });
   };
 
-  if (migrationNeeded === null || (migrationNeeded && !configData)) {
-    if (migrationNeeded) {
-      return (
-        <Card className="border-amber-300 bg-amber-50 dark:bg-amber-950/30">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2 text-amber-700 dark:text-amber-400">
-              <AlertCircle className="w-5 h-5" />
-              Migrasi Database Diperlukan
-            </CardTitle>
-            <CardDescription>
-              Tabel cashback belum dibuat di database. Jalankan migrasi terlebih dahulu untuk menggunakan fitur Cashback Management.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Database Connection String (URI)</Label>
-              <Input
-                type="password"
-                value={dbUrl}
-                onChange={(e) => setDbUrl(e.target.value)}
-                placeholder="postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres"
-                className="text-xs"
-              />
-              <p className="text-xs text-muted-foreground">
-                Dapatkan dari: Supabase Dashboard &rarr; Settings &rarr; Database &rarr; Connection string (URI)
-              </p>
-            </div>
-            <Button onClick={runMigration} disabled={migrating || !dbUrl.trim()}>
-              {migrating ? (
-                <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Menjalankan Migrasi...</>
-              ) : (
-                <><Settings className="w-4 h-4 mr-2" />Jalankan Migrasi</>
-              )}
-            </Button>
-            {migrationStatus?.tables && (
-              <div className="flex gap-2 flex-wrap">
-                {Object.entries(migrationStatus.tables).map(([name, exists]) => (
-                  <Badge key={name} variant={exists ? 'default' : 'destructive'} className="text-xs">
-                    {name}: {exists ? '✓' : '✗'}
-                  </Badge>
-                ))}
-              </div>
+  if (migrationNeeded && !configData) {
+    return (
+      <Card className="border-amber-300 bg-amber-50 dark:bg-amber-950/30">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2 text-amber-700 dark:text-amber-400">
+            <AlertCircle className="w-5 h-5" />
+            Migrasi Database Diperlukan
+          </CardTitle>
+          <CardDescription>
+            Tabel cashback belum dibuat di database. Jalankan migrasi terlebih dahulu untuk menggunakan fitur Cashback Management.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Database Connection String (URI)</Label>
+            <Input
+              type="password"
+              value={dbUrl}
+              onChange={(e) => setDbUrl(e.target.value)}
+              placeholder="postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres"
+              className="text-xs"
+            />
+            <p className="text-xs text-muted-foreground">
+              Dapatkan dari: Supabase Dashboard &rarr; Settings &rarr; Database &rarr; Connection string (URI)
+            </p>
+          </div>
+          <Button onClick={runMigration} disabled={migrating || !dbUrl.trim()}>
+            {migrating ? (
+              <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Menjalankan Migrasi...</>
+            ) : (
+              <><Settings className="w-4 h-4 mr-2" />Jalankan Migrasi</>
             )}
-          </CardContent>
-        </Card>
-      );
-    }
-    return <LoadingFallback message="Memeriksa database..." />;
+          </Button>
+          {migrationStatus?.tables && (
+            <div className="flex gap-2 flex-wrap">
+              {Object.entries(migrationStatus.tables).map(([name, exists]) => (
+                <Badge key={name} variant={exists ? 'default' : 'destructive'} className="text-xs">
+                  {name}: {exists ? '✓' : '✗'}
+                </Badge>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
   }
 
   if (isLoading || isLoadingCustomers) {
@@ -632,6 +627,10 @@ function WithdrawalsTab() {
   const [rejectReason, setRejectReason] = useState('');
   const [processDialog, setProcessDialog] = useState<{ id: string; customerName: string; amount: number } | null>(null);
   const [processNotes, setProcessNotes] = useState('');
+  const [processSourceType, setProcessSourceType] = useState<string>('profit_paid');
+  const [processDestType, setProcessDestType] = useState<string>('bank_account');
+  const [processBankAccountId, setProcessBankAccountId] = useState<string>('');
+  const [processCashBoxId, setProcessCashBoxId] = useState<string>('');
 
   const { data: withdrawalsData, isLoading, refetch } = useQuery({
     queryKey: ['cashback-withdrawals', statusFilter],
@@ -656,6 +655,8 @@ function WithdrawalsTab() {
       setProcessDialog(null);
       setRejectReason('');
       setProcessNotes('');
+      setProcessBankAccountId('');
+      setProcessCashBoxId('');
     },
     onError: (err: any) => {
       toast.error(err.message || 'Gagal memproses pencairan');
@@ -680,9 +681,24 @@ function WithdrawalsTab() {
 
   const handleProcess = () => {
     if (!processDialog) return;
+    if (processDestType === 'bank_account' && !processBankAccountId) {
+      toast.error('Pilih rekening bank tujuan');
+      return;
+    }
+    if (processDestType === 'cash_box' && !processCashBoxId) {
+      toast.error('Pilih brankas tujuan');
+      return;
+    }
     processMutation.mutate({
       id: processDialog.id,
-      data: { status: 'processed', notes: processNotes },
+      data: {
+        status: 'processed',
+        notes: processNotes,
+        sourceType: processSourceType,
+        destinationType: processDestType,
+        bankAccountId: processDestType === 'bank_account' ? processBankAccountId : undefined,
+        cashBoxId: processDestType === 'cash_box' ? processCashBoxId : undefined,
+      } as any,
     });
   };
 
@@ -885,7 +901,7 @@ function WithdrawalsTab() {
       </Dialog>
 
       {/* Process Dialog */}
-      <Dialog open={!!processDialog} onOpenChange={(open) => { if (!open) setProcessDialog(null); }}>
+      <Dialog open={!!processDialog} onOpenChange={(open) => { if (!open) { setProcessDialog(null); setProcessBankAccountId(''); setProcessCashBoxId(''); } }}>
         <DialogContent className="w-[calc(100vw-2rem)] max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-blue-600">
@@ -897,6 +913,51 @@ function WithdrawalsTab() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {/* Source pool selector */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Sumber Dana</Label>
+              <Select value={processSourceType} onValueChange={setProcessSourceType}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="profit_paid">Pool Profit</SelectItem>
+                  <SelectItem value="hpp_paid">Pool HPP</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground">Dana pencairan diambil dari pool mana</p>
+            </div>
+
+            {/* Destination type selector */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Tujuan Pencairan</Label>
+              <Select value={processDestType} onValueChange={setProcessDestType}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bank_account">Rekening Bank</SelectItem>
+                  <SelectItem value="cash_box">Brankas</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Bank account selector */}
+            {processDestType === 'bank_account' && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Rekening Bank</Label>
+                <WithdrawalBankAccountSelect value={processBankAccountId} onChange={setProcessBankAccountId} />
+              </div>
+            )}
+
+            {/* Cash box selector */}
+            {processDestType === 'cash_box' && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Brankas</Label>
+                <WithdrawalCashBoxSelect value={processCashBoxId} onChange={setProcessCashBoxId} />
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label>Catatan (opsional)</Label>
               <Textarea
@@ -908,14 +969,72 @@ function WithdrawalsTab() {
             </div>
           </div>
           <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => setProcessDialog(null)}>Batal</Button>
-            <Button onClick={handleProcess} disabled={processMutation.isPending}>
+            <Button variant="outline" onClick={() => { setProcessDialog(null); setProcessBankAccountId(''); setProcessCashBoxId(''); }}>Batal</Button>
+            <Button
+              onClick={handleProcess}
+              disabled={processMutation.isPending || (
+                processDestType === 'bank_account' ? !processBankAccountId : !processCashBoxId
+              )}
+            >
               {processMutation.isPending ? 'Memproses...' : 'Konfirmasi Proses'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// ============ HELPER: Bank Account / Cash Box selectors for Withdrawal Process ============
+function WithdrawalBankAccountSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { data } = useQuery({
+    queryKey: ['bank-accounts-for-withdrawal'],
+    queryFn: () => apiFetch<{ bankAccounts: any[] }>('/api/finance/bank-accounts'),
+    staleTime: 60000,
+  });
+  const items = data?.bankAccounts || [];
+  if (items.length === 0) {
+    return <p className="text-xs text-muted-foreground">Tidak ada akun bank tersedia</p>;
+  }
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="w-full">
+        <SelectValue placeholder="Pilih rekening bank..." />
+      </SelectTrigger>
+      <SelectContent>
+        {items.map((acc: any) => (
+          <SelectItem key={acc.id} value={acc.id}>
+            {acc.name} — {acc.bankName || acc.bank_name || ''}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function WithdrawalCashBoxSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { data } = useQuery({
+    queryKey: ['cash-boxes-for-withdrawal'],
+    queryFn: () => apiFetch<{ cashBoxes: any[] }>('/api/finance/cash-boxes'),
+    staleTime: 60000,
+  });
+  const items = data?.cashBoxes || [];
+  if (items.length === 0) {
+    return <p className="text-xs text-muted-foreground">Tidak ada brankas tersedia</p>;
+  }
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="w-full">
+        <SelectValue placeholder="Pilih brankas..." />
+      </SelectTrigger>
+      <SelectContent>
+        {items.map((box: any) => (
+          <SelectItem key={box.id} value={box.id}>
+            {box.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 

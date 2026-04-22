@@ -43,12 +43,12 @@ export async function GET(request: NextRequest) {
 
     const stats = {
       total: (allWithdrawals || []).length,
-      pending: (allWithdrawals || []).filter((w: any) => w.status === 'pending').length,
-      approved: (allWithdrawals || []).filter((w: any) => w.status === 'approved').length,
-      processed: (allWithdrawals || []).filter((w: any) => w.status === 'processed').length,
-      rejected: (allWithdrawals || []).filter((w: any) => w.status === 'rejected').length,
-      totalPendingAmount: (allWithdrawals || []).filter((w: any) => w.status === 'pending').reduce((s: number, w: any) => s + w.amount, 0),
-      totalProcessedAmount: (allWithdrawals || []).filter((w: any) => w.status === 'processed').reduce((s: number, w: any) => s + w.amount, 0),
+      pendingCount: (allWithdrawals || []).filter((w: any) => w.status === 'pending').length,
+      approvedCount: (allWithdrawals || []).filter((w: any) => w.status === 'approved').length,
+      processedCount: (allWithdrawals || []).filter((w: any) => w.status === 'processed').length,
+      rejectedCount: (allWithdrawals || []).filter((w: any) => w.status === 'rejected').length,
+      pendingAmount: (allWithdrawals || []).filter((w: any) => w.status === 'pending').reduce((s: number, w: any) => s + w.amount, 0),
+      totalProcessed: (allWithdrawals || []).filter((w: any) => w.status === 'processed').reduce((s: number, w: any) => s + w.amount, 0),
     };
 
     return NextResponse.json({

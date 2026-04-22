@@ -150,8 +150,6 @@ export async function POST(
           assigned_to_id: superAdmin?.id || null,
           status: 'inactive', // prospect/lead — not yet active
           distance: 'near',
-          cashback_type: null,
-          cashback_value: 0,
           cashback_balance: 0,
           total_orders: 0,
           total_spent: 0,

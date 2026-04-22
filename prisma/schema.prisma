@@ -171,6 +171,8 @@ model Customer {
   totalOrders         Int      @default(0) @map("total_orders")
   totalSpent          Float    @default(0) @map("total_spent")
   cashbackBalance     Float    @default(0) @map("cashback_balance") // Customer cashback balance
+  cashbackType        String   @default("percentage") @map("cashback_type") // percentage, nominal
+  cashbackValue       Float    @default(0) @map("cashback_value") // Cashback value per order
   status              String   @default("active") // active, lost, inactive
   assignedToId        String?  @map("assigned_to_id") // Sales yang menangani pelanggan ini
   lastTransactionDate DateTime? @map("last_transaction_date") // Tanggal transaksi terakhir
@@ -947,8 +949,10 @@ model CashbackLog {
   customerId    String   @map("customer_id")
   transactionId String?  @map("transaction_id")
   withdrawalId  String?  @map("withdrawal_id")
-  type          String   // earned, withdrawn, reversed, referral_bonus
+  type          String   // earned, withdrawn, reversed, referral_bonus, admin_adjustment
   amount        Float
+  balanceBefore Float    @default(0) @map("balance_before")
+  balanceAfter  Float    @default(0) @map("balance_after")
   description   String?
   createdAt     DateTime @default(now()) @map("created_at")
   
@@ -967,6 +971,9 @@ model CashbackWithdrawal {
   accountNo       String?   @map("account_no")
   accountHolder   String?   @map("account_holder")
   status          String    @default("pending") // pending, approved, rejected, processed
+  sourceType      String?   @map("source_type") // profit_paid, hpp_paid
+  bankAccountId   String?   @map("bank_account_id")
+  cashBoxId       String?   @map("cash_box_id")
   notes           String?
   processedById   String?   @map("processed_by_id")
   processedAt     DateTime? @map("processed_at")

@@ -96,7 +96,8 @@ interface SalesUser {
 
 // ============ CONSTANTS ============
 const TASK_TYPES: { value: string; label: string }[] = [
-  { value: 'general', label: 'Kunjungan' },
+  { value: 'general', label: 'Umum' },
+  { value: 'visit', label: 'Kunjungan' },
   { value: 'followup', label: 'Follow Up' },
   { value: 'prospecting', label: 'Prospecting' },
   { value: 'collection', label: 'Collection' },
@@ -198,7 +199,8 @@ function PriorityBadge({ priority }: { priority: string }) {
 
 function TypeBadge({ type }: { type: string }) {
   const labels: Record<string, string> = {
-    general: 'Kunjungan',
+    general: 'Umum',
+    visit: 'Kunjungan',
     followup: 'Follow Up',
     prospecting: 'Prospecting',
     collection: 'Collection',

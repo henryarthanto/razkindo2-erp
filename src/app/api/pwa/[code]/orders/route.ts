@@ -122,7 +122,7 @@ export async function POST(
     // Look up customer (only active)
     const { data: customer } = await db
       .from('customers')
-      .select('id, name, phone, unit_id, assigned_to_id, cashback_balance, cashback_type, cashback_value')
+      .select('*')
       .eq('code', code.trim().toUpperCase())
       .eq('status', 'active')
       .single();

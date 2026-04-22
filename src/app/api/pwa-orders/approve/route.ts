@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       .from('transactions')
       .select(`
         *,
-        customer:customers(id, name, phone, unit_id, assigned_to_id, distance, cashback_balance, cashback_type, cashback_value, total_orders, total_spent),
+        customer:customers(id, name, phone, unit_id, assigned_to_id, distance, cashback_balance, total_orders, total_spent),
         unit:units(id, name),
         items:transaction_items(*, product:products(id, name, avg_hpp, purchase_price, unit, sub_unit, conversion_rate, selling_price, sell_price_per_sub_unit))
         `)

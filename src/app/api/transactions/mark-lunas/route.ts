@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
       .from('transactions')
       .select(`
         *,
-        customer:customers(id, name, phone, unit_id, assigned_to_id, cashback_balance, cashback_type, cashback_value, total_orders, total_spent),
+        customer:customers(id, name, phone, unit_id, assigned_to_id, cashback_balance, total_orders, total_spent),
         unit:units(id, name),
         items:transaction_items(*, product:products(id, name, avg_hpp, unit, sub_unit, conversion_rate, selling_price, sell_price_per_sub_unit))
       `)
@@ -340,8 +340,8 @@ export async function POST(request: NextRequest) {
     let cashbackEarned = 0;
     if (customer) {
     try {
-      const cbType = customer.cashbackType || 'percentage';
-      const cbValue = customer.cashbackValue || 0;
+      const cbType = customer.cashbackType || customer.cashback_type || 'percentage';
+      const cbValue = customer.cashbackValue || customer.cashback_value || 0;
 
       if (cbValue > 0) {
         let cbAmount = 0;

@@ -39,16 +39,24 @@ export async function GET(request: NextRequest) {
     const { data: tasks, error } = await query;
     if (error) throw error;
 
-    const mappedTasks = rowsToCamelCase(tasks || []).map((task: any) => ({
-      ...task,
-      latestReport: task.reports && task.reports[0] ? { id: task.reports[0].id, note: task.reports[0].note, status: task.reports[0].status, createdAt: task.reports[0].created_at, reportedBy: task.reports[0].reported_by } : null,
-    }));
+    const mappedTasks = rowsToCamelCase(tasks || []).map((task: any) => {
+      // After rowsToCamelCase, nested report keys are already camelCase
+      const reports = task.reports || [];
+      // Sort reports by createdAt descending so [0] is the latest
+      reports.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      return {
+        ...task,
+        reports,
+        latestReport: reports[0] ? { id: reports[0].id, note: reports[0].note, status: reports[0].status, createdAt: reports[0].createdAt, reportedBy: reports[0].reportedBy } : null,
+      };
+    });
 
     // Summary
     const now = new Date();
     let overdueCount = 0;
     for (const t of mappedTasks) {
-      if (t.dueDate) {
+      // Only count overdue for active tasks (not completed/cancelled)
+      if (t.dueDate && t.status !== 'completed' && t.status !== 'cancelled') {
         const due = new Date(t.dueDate);
         due.setHours(23, 59, 59, 999);
         if (now > due) overdueCount++;

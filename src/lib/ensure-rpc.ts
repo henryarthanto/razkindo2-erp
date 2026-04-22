@@ -208,13 +208,22 @@ async function deployWithConnectionString(connString: string): Promise<{ deploye
   let deployed = 0;
   let failed = 0;
 
-  const { Pool } = await import('pg');
+  // Gracefully handle missing `pg` module (e.g., in lightweight deployments)
+  let Pool: any;
+  try {
+    const pg = await import('pg');
+    Pool = pg.Pool;
+  } catch {
+    console.warn('[ensure-rpc] pg module not available — skipping RPC deployment. Local Prisma-backed handlers will be used instead.');
+    throw new Error('pg module not installed');
+  }
+
   const pool = new Pool({
     connectionString: connString,
     ssl: { rejectUnauthorized: false },
     max: 2,
     idleTimeoutMillis: 30_000,
-    connectionTimeoutMillis: 15_000,
+    connectionTimeoutMillis: 5_000, // Reduced from 15s to avoid slow startup
   });
 
   const client = await pool.connect();
@@ -248,7 +257,7 @@ export async function ensureRpcFunctions(): Promise<void> {
   const candidates = getConnectionStringCandidates();
 
   if (candidates.length === 0) {
-    console.log('[ensure-rpc] No database URL configured (SUPABASE_DB_URL / SUPABASE_POOLER_URL), skipping RPC deployment.');
+    console.log('[ensure-rpc] No database URL configured (SUPABASE_DB_URL / SUPABASE_POOLER_URL), skipping RPC deployment. Local Prisma-backed RPC handlers will be used.');
     return;
   }
 
@@ -272,7 +281,14 @@ export async function ensureRpcFunctions(): Promise<void> {
   }
 
   if (!connected) {
-    console.error('[ensure-rpc] All connection methods failed. RPC functions were NOT deployed.');
+    // NOT a fatal error — the app still works via:
+    //   1. Supabase REST API for CRUD
+    //   2. Local Prisma-backed RPC handlers (in supabase.ts)
+    console.warn(
+      '[ensure-rpc] All connection methods failed. Remote RPC functions were NOT deployed.\n' +
+      '[ensure-rpc] The app will use local Prisma-backed RPC handlers instead. ' +
+      'To deploy RPC functions later, use the /api/setup-rpc endpoint when the DB is reachable.'
+    );
   } else {
     console.log(`[ensure-rpc] Deployed ${deployed}/${RPC_DEFINITIONS.length} RPC functions${failed > 0 ? ` (${failed} failed)` : ''}`);
   }

@@ -41,7 +41,11 @@ const PRIORITY_CONFIG: Record<TaskPriority, { label: string; className: string }
 
 const isOverdue = (dueDate?: string | null): boolean => {
   if (!dueDate) return false;
-  return new Date(dueDate) < new Date();
+  const now = new Date();
+  const due = new Date(dueDate);
+  // Set due to end of day in local timezone for consistent overdue check
+  due.setHours(23, 59, 59, 999);
+  return now > due;
 };
 
 // ================================
@@ -113,7 +117,7 @@ export default function SalesTaskPopup({ onNavigate }: SalesTaskPopupProps) {
           "px-5 pt-5 pb-4 bg-gradient-to-br",
           hasOverdue
             ? "from-orange-500 to-red-600"
-            : "from-blue-500 to-indigo-600"
+            : "from-teal-500 to-emerald-600"
         )}>
           <DialogHeader>
             <DialogTitle className="text-white text-base flex items-center gap-2">

@@ -86,11 +86,11 @@ export default function DeliveriesModule() {
   };
 
   const pendingDeliveries = deliveries.filter((t: Transaction) =>
-    t.status === 'approved' && t.paymentStatus === 'unpaid' && !t.deliveredAt && inDateRange(t.transactionDate.toString())
+    t.status !== 'cancelled' && !t.deliveredAt && inDateRange(t.transactionDate.toString())
   );
 
   const completedDeliveries = deliveries.filter((t: Transaction) =>
-    t.deliveredAt && inDateRange(t.deliveredAt.toString())
+    !!t.deliveredAt && inDateRange(t.deliveredAt.toString())
   );
 
   // Commission summary for super admin

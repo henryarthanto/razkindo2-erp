@@ -810,7 +810,7 @@ export const api = {
     getWithdrawals: (status?: string) =>
       apiFetch<{ withdrawals: any[]; stats: any }>(`/api/cashback/withdrawals${status ? `?status=${status}` : ''}`),
 
-    processWithdrawal: (id: string, data: { status: string; rejectionReason?: string; notes?: string }) =>
+    processWithdrawal: (id: string, data: { status: string; rejectionReason?: string; notes?: string; sourceType?: string; destinationType?: string; bankAccountId?: string; cashBoxId?: string }) =>
       apiFetch<{ success: boolean; withdrawal: any }>(`/api/cashback/withdrawals/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(data),

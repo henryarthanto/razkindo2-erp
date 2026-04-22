@@ -297,16 +297,17 @@ export function GoodsStatusForm({ request, onUpdate, isLoading }: {
 }
 
 // Purchase Request Form Component - Request to Finance
-export function PurchaseRequestForm({ suppliers, products, units, userId, unitId, onSuccess }: {
+export function PurchaseRequestForm({ suppliers, products, units, userId, unitId, preselectedSupplierId, onSuccess }: {
   suppliers: Supplier[];
   products: Product[];
   units: any[];
   userId: string;
   unitId?: string;
+  preselectedSupplierId?: string;
   onSuccess: () => void;
 }) {
   const [formData, setFormData] = useState({
-    supplierId: '',
+    supplierId: preselectedSupplierId || '',
     unitId: '',
     transactionDate: todayLocal(),
     notes: '',
@@ -322,12 +323,15 @@ export function PurchaseRequestForm({ suppliers, products, units, userId, unitId
   const [showCustomProduct, setShowCustomProduct] = useState(false);
   const [customProduct, setCustomProduct] = useState({ name: '', unit: 'pcs', price: 0, qty: 1 });
 
-  // Use prop unitId as default if available
+  // Use prop unitId and preselectedSupplierId as defaults if available
   useEffect(() => {
-    if (unitId && !formData.unitId) {
-      setFormData(prev => ({ ...prev, unitId }));
-    }
-  }, [unitId]);
+    setFormData(prev => {
+      const updates: Partial<typeof prev> = {};
+      if (unitId && !prev.unitId) updates.unitId = unitId;
+      if (preselectedSupplierId && !prev.supplierId) updates.supplierId = preselectedSupplierId;
+      return { ...prev, ...updates };
+    });
+  }, [unitId, preselectedSupplierId]);
   
   const filteredProducts = products.filter(p => 
     p.name.toLowerCase().includes(productSearch.toLowerCase())

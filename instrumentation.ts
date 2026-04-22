@@ -6,22 +6,23 @@
 // and PerformanceMonitor.
 // =====================================================================
 
-// Global uncaught error handler — provides full stack traces in production
-// where Next.js otherwise shows "ignore-listed frames"
-process.on('uncaughtException', (error) => {
-  console.error('[FATAL] Uncaught Exception:', error);
-  console.error('[FATAL] Stack:', error.stack);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('[FATAL] Unhandled Rejection at:', promise, 'reason:', reason);
-  if (reason instanceof Error) {
-    console.error('[FATAL] Stack:', reason.stack);
-  }
-});
-
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
+    // Global uncaught error handler — provides full stack traces in production
+    // where Next.js otherwise shows "ignore-listed frames"
+    // Must be inside the nodejs runtime check — process.on is not available in Edge Runtime
+    process.on('uncaughtException', (error) => {
+      console.error('[FATAL] Uncaught Exception:', error);
+      console.error('[FATAL] Stack:', error.stack);
+    });
+
+    process.on('unhandledRejection', (reason, promise) => {
+      console.error('[FATAL] Unhandled Rejection at:', promise, 'reason:', reason);
+      if (reason instanceof Error) {
+        console.error('[FATAL] Stack:', reason.stack);
+      }
+    });
+
     console.log('[Instrumentation] Starting server-side initialization...');
 
     // Initialize memory monitoring

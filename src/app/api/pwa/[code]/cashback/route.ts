@@ -20,7 +20,7 @@ export async function GET(
 
     const { data: customer } = await db
       .from('customers')
-      .select('id, name, cashback_balance, cashback_type, cashback_value')
+      .select('*')
       .eq('code', code.trim().toUpperCase())
       .eq('status', 'active')
       .single();

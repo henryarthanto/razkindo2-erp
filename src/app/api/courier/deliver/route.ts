@@ -46,9 +46,9 @@ export async function PATCH(request: NextRequest) {
     if (transaction.delivered_at) throw new Error('Transaksi sudah dikirim');
     if (transaction.status === 'cancelled') throw new Error('Transaksi sudah dibatalkan');
     if (transaction.type !== 'sale') throw new Error('Hanya transaksi penjualan yang dapat dikirim');
-    if (transaction.payment_status === 'paid') {
-      throw new Error('Transaksi sudah lunas');
-    }
+    // Note: We intentionally do NOT block delivery when payment_status === 'paid'.
+    // A transaction may be fully paid before delivery (e.g., customer paid via transfer).
+    // The courier still needs to physically deliver the goods regardless of payment status.
 
     // Get courier info
     const { data: courier } = await db.from('users').select('name, near_commission, far_commission, unit_id').eq('id', courierId).single();
