@@ -26,10 +26,11 @@ import { existsSync } from 'fs';
  * if no candidate exists.
  */
 export function resolveProjectPath(relPath: string): string {
+  const cwd = /*turbopackIgnore: true*/ process.cwd();
   const candidates = [
-    join(process.cwd(), relPath),
-    join(process.cwd(), '..', relPath),
-    join(process.cwd(), '..', '..', relPath),
+    join(cwd, relPath),
+    join(cwd, '..', relPath),
+    join(cwd, '..', '..', relPath),
   ];
 
   for (const candidate of candidates) {
@@ -43,7 +44,7 @@ export function resolveProjectPath(relPath: string): string {
   }
 
   // Return default even if it doesn't exist (caller will handle the error)
-  return resolve(join(process.cwd(), relPath));
+  return resolve(join(cwd, relPath));
 }
 
 /**

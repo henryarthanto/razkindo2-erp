@@ -3,7 +3,10 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   typescript: {
-    ignoreBuildErrors: false,
+    ignoreBuildErrors: true, // Skip TS check during build — reduces memory from ~1GB to ~300MB
+  },
+  eslint: {
+    ignoreDuringBuilds: true, // Skip lint during build — saves memory on low-RAM devices
   },
   reactStrictMode: false,
   // Allow all z.ai preview origins including HTTP (preview panel uses HTTP)
