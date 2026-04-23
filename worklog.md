@@ -145,3 +145,31 @@ Stage Summary:
 - All 6 critical API fixes applied successfully
 - Lint passes with 0 errors (1 pre-existing warning in dashboard/route.ts)
 - Files modified: mark-lunas/route.ts, transactions/route.ts, asset-value/route.ts, approve/route.ts, sales-tasks/[id]/route.ts
+---
+Task ID: all-bug-fixes
+Agent: main
+Task: Fix all 7 broken modules (Products & Stock, Transactions, Assignments, Supplier/Purchase, Delivery, Cashback, PWA Orders)
+
+Work Log:
+- Fixed Prisma schema: added defaults for required columns on tables with existing data
+- Fixed PaymentProof schema: added file_size, file_type, customer_name, notes columns
+- Fixed CustomerReferral schema: added business_name, pic_name, notes columns, status default='new'
+- Fixed mark-lunas: customer query now selects cashback_type/cashback_value for cashback calculation
+- Fixed mark-lunas: added piutang/tempo without courier handler (payment records now created)
+- Fixed transactions GET: added paymentStatus query parameter support
+- Fixed Products asset-value: topProducts now includes unit/subUnit/conversionRate fields
+- Fixed approve route: unit_products only created for per_unit stock type (no more double-counting)
+- Fixed Sales Tasks PATCH: completionNote now saved when marking completed
+- Fixed TransactionsModule: "partial" filter sends paymentStatus=partial + status=approved
+- Fixed PWA Orders: paid filter now matches status='paid' OR (approved + paymentStatus=paid)
+- Fixed realtime sync: erp:task_update now invalidates my-tasks and my-tasks-popup query keys
+- Fixed PWA customer lookup: uses per-customer cashback settings with fallback to global config
+- Added purchasePrice to Product TypeScript interface
+- Added sourceType, bankAccountId, cashBoxId, bankAccount, cashBox to CashbackWithdrawal interface
+- All changes committed and pushed to GitHub
+
+Stage Summary:
+- 12 files changed, 135 insertions, 46 deletions
+- 0 lint errors
+- Schema synced with remote database (prisma db push successful)
+- Dev server running correctly on port 3000
