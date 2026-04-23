@@ -25,7 +25,7 @@ export async function GET(
     // Look up customer by code (customers table uses 'status' not 'is_active')
     const { data: customer, error } = await db
       .from('customers')
-      .select('id, name, phone, address, code, cashback_balance, unit_id, status')
+      .select('id, name, phone, address, code, cashback_balance, cashback_type, cashback_value, unit_id, status')
       .eq('code', code.trim().toUpperCase())
       .eq('status', 'active')
       .single();
@@ -45,22 +45,25 @@ export async function GET(
       .select('*', { count: 'exact', head: true })
       .eq('customer_id', customer.id);
 
-    // Get cashback config from the correct table
-    let cashbackType = 'percentage';
-    let cashbackValue = 0;
-    try {
-      const { data: cashbackConfig } = await db
-        .from('cashback_config')
-        .select('type, value')
-        .eq('is_active', true)
-        .limit(1)
-        .maybeSingle();
-      if (cashbackConfig) {
-        cashbackType = cashbackConfig.type || 'percentage';
-        cashbackValue = cashbackConfig.value || 0;
+    // Use customer-specific cashback settings (per-customer overrides global config)
+    let cashbackType = customer.cashback_type || 'percentage';
+    let cashbackValue = customer.cashback_value || 0;
+    // Fallback to global config if customer has no specific cashback settings
+    if (!cashbackValue || cashbackValue <= 0) {
+      try {
+        const { data: cashbackConfig } = await db
+          .from('cashback_config')
+          .select('type, value')
+          .eq('is_active', true)
+          .limit(1)
+          .maybeSingle();
+        if (cashbackConfig) {
+          cashbackType = cashbackConfig.type || 'percentage';
+          cashbackValue = cashbackConfig.value || 0;
+        }
+      } catch {
+        // cashback_config table may not exist yet; use defaults
       }
-    } catch {
-      // cashback_config table may not exist yet; use defaults
     }
 
     const camel = toCamelCase(customer);

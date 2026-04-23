@@ -55,6 +55,7 @@ export interface Product {
   globalStock: number;
   avgHpp: number;
   sellingPrice: number;
+  purchasePrice: number;
   sellPricePerSubUnit: number;
   minStock: number;
   stockType: 'centralized' | 'per_unit';
@@ -632,6 +633,11 @@ export interface CashbackWithdrawal {
   processedById?: string;
   processedAt?: Date;
   rejectionReason?: string;
+  sourceType?: 'hpp_hand' | 'profit_hand' | 'bank' | 'cashbox';
+  bankAccountId?: string;
+  cashBoxId?: string;
+  bankAccount?: BankAccount;
+  cashBox?: CashBox;
   notes?: string;
   createdAt: Date;
   updatedAt: Date;

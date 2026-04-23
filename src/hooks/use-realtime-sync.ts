@@ -62,6 +62,8 @@ const EVENT_TO_QUERY_KEYS: Record<string, string[][]> = {
   // Sales task events — invalidate tasks
   'erp:task_update': [
     ['sales-tasks'],
+    ['my-tasks'],
+    ['my-tasks-popup'],
   ],
 
   // Finance request events — invalidate finance requests, dashboard, pools

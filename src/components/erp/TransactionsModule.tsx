@@ -467,7 +467,14 @@ export default function TransactionsModule() {
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set('type', 'sale');
-      if (filters.status && filters.status !== 'all') params.set('status', filters.status);
+      if (filters.status && filters.status !== 'all') {
+        if (filters.status === 'partial') {
+          params.set('paymentStatus', 'partial');
+          params.set('status', 'approved'); // partial payment status implies approved transactions
+        } else {
+          params.set('status', filters.status);
+        }
+      }
       if (queryUnitId) params.set('unitId', queryUnitId);
       if (user?.role === 'sales' && user?.id) params.set('createdById', user.id);
       return apiFetch<any>(`/api/transactions?${params.toString()}`);

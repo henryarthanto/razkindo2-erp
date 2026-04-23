@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
       .from('transactions')
       .select(`
         *,
-        customer:customers(id, name, phone, unit_id, assigned_to_id, cashback_balance, total_orders, total_spent),
+        customer:customers(id, name, phone, unit_id, assigned_to_id, cashback_balance, cashback_type, cashback_value, total_orders, total_spent),
         unit:units(id, name),
         items:transaction_items(*, product:products(id, name, avg_hpp, unit, sub_unit, conversion_rate, selling_price, sell_price_per_sub_unit))
       `)
@@ -186,6 +186,23 @@ export async function POST(request: NextRequest) {
       if (!bankAccount.is_active) return NextResponse.json({ error: 'Akun bank tidak aktif' }, { status: 400 });
       targetBankAccountId = bankAccountId;
       targetBankAccountName = bankAccount.name;
+    } else if (paymentMethod === 'piutang' || paymentMethod === 'tempo') {
+      // Piutang/tempo without courier: money was already owed, now being marked lunas
+      // For piutang/tempo, we need to know HOW the payment was received
+      // If no bank/cashbox specified, default to cashbox (will be credited later)
+      if (cashBoxId) {
+        const { data: cashBox } = await db.from('cash_boxes').select('*').eq('id', cashBoxId).single();
+        if (cashBox && !cashBox.is_active) return NextResponse.json({ error: 'Brankas tidak aktif' }, { status: 400 });
+        targetCashBoxId = cashBoxId;
+        targetCashBoxName = cashBox?.name || null;
+      } else if (bankAccountId) {
+        const { data: bankAccount } = await db.from('bank_accounts').select('*').eq('id', bankAccountId).single();
+        if (bankAccount && !bankAccount.is_active) return NextResponse.json({ error: 'Akun bank tidak aktif' }, { status: 400 });
+        targetBankAccountId = bankAccountId;
+        targetBankAccountName = bankAccount?.name || null;
+      }
+      // If neither cashBoxId nor bankAccountId provided, payment record will still be created
+      // but without a cash/bank destination (acceptable for piutang settlements)
     }
 
     // ─── Atomic guard: use conditional update to prevent TOCTOU race condition ───

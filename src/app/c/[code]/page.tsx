@@ -832,7 +832,7 @@ export default function CustomerPWAPage({
         if (orderStatusFilter === 'pending_approval') return order.status === 'pending';
         if (orderStatusFilter === 'pending_payment') return order.status === 'approved' && order.paymentStatus === 'unpaid';
         if (orderStatusFilter === 'partial_payment') return order.status === 'approved' && order.paymentStatus === 'partial';
-        if (orderStatusFilter === 'paid') return order.status === 'approved' && order.paymentStatus === 'paid';
+        if (orderStatusFilter === 'paid') return order.status === 'paid' || (order.status === 'approved' && order.paymentStatus === 'paid');
         if (orderStatusFilter === 'cancelled') return order.status === 'cancelled';
         return true;
       });

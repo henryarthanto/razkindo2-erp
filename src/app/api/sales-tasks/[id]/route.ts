@@ -50,7 +50,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (!existing) return NextResponse.json({ error: 'Tugas tidak ditemukan' }, { status: 404 });
 
     const data = await request.json();
-    const { title, description, type, priority, status, dueDate } = data;
+    const { title, description, type, priority, status, dueDate, completionNote } = data;
 
     const validTypes = ['general', 'visit', 'followup', 'prospecting', 'collection', 'other'];
     if (type && !validTypes.includes(type)) return NextResponse.json({ error: 'Tipe tugas tidak valid' }, { status: 400 });
@@ -69,6 +69,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (status !== undefined && status !== existing.status) {
       updateData.status = status;
       if (status === 'completed' && !existing.completed_at) updateData.completed_at = new Date().toISOString();
+      if (completionNote) updateData.completion_note = completionNote.trim();
       if (status !== 'completed') { updateData.completed_at = null; updateData.completion_note = null; }
     }
 

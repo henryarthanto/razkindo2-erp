@@ -132,32 +132,33 @@ export async function POST(
               .eq('id', item.productId);
           }
 
-          // BUG FIX #7: For per_unit products, recalc global_stock from unit_products
-          const { data: unitProduct } = await db
-            .from('unit_products')
-            .select('*')
-            .eq('unit_id', txCamel.unitId)
-            .eq('product_id', item.productId)
-            .maybeSingle();
-
-          if (unitProduct) {
-            await db
-              .from('unit_products')
-              .update({ stock: unitProduct.stock + stockQty })
-              .eq('id', unitProduct.id);
-          } else {
-            await db
-              .from('unit_products')
-              .insert({
-                id: crypto.randomUUID(),
-                unit_id: txCamel.unitId,
-                product_id: item.productId,
-                stock: stockQty
-              });
-          }
-
-          // BUG FIX #7: Recalculate global_stock from sum of unit_products for per_unit products
+          // Only create/update unit_products for per_unit stock type products
+          // For centralized products, global_stock was already updated by increment_stock_with_hpp RPC above
           if (product.stock_type === 'per_unit') {
+            const { data: unitProduct } = await db
+              .from('unit_products')
+              .select('*')
+              .eq('unit_id', txCamel.unitId)
+              .eq('product_id', item.productId)
+              .maybeSingle();
+
+            if (unitProduct) {
+              await db
+                .from('unit_products')
+                .update({ stock: unitProduct.stock + stockQty })
+                .eq('id', unitProduct.id);
+            } else {
+              await db
+                .from('unit_products')
+                .insert({
+                  id: crypto.randomUUID(),
+                  unit_id: txCamel.unitId,
+                  product_id: item.productId,
+                  stock: stockQty
+                });
+            }
+
+            // Recalculate global_stock from sum of unit_products for per_unit products
             const { error: recalcErr } = await db.rpc('recalc_global_stock', { p_product_id: item.productId });
             if (recalcErr) console.warn('recalc_global_stock warning (purchase per_unit):', recalcErr.message);
           }

@@ -108,3 +108,40 @@
 11. `src/app/api/transactions/mark-lunas/route.ts` — Resilient cashback field access
 12. `src/app/api/customers/route.ts` — Removed non-existent column insert
 13. `src/app/api/customers/[id]/route.ts` — Added early return for empty updates
+
+---
+Task ID: 3g-3j
+Agent: frontend-schema-types-fixes
+Task: Fix frontend filter, realtime sync, TypeScript types, and Prisma schema bugs
+
+Work Log:
+- Fix 1: TransactionsModule.tsx — Changed "partial" filter to send paymentStatus=partial + status=approved instead of status=partial
+- Fix 2: use-realtime-sync.ts — Added ['my-tasks'] and ['my-tasks-popup'] query keys to erp:task_update event for proper cache invalidation
+- Fix 3: types/index.ts — Added purchasePrice: number field to Product interface after sellingPrice
+- Fix 4: types/index.ts — Added sourceType, bankAccountId, cashBoxId, bankAccount, cashBox fields to CashbackWithdrawal interface after rejectionReason
+- Fix 5: prisma/schema.prisma — Added businessName, picName, notes fields to CustomerReferral model; changed status default from "pending" to "new" with updated comment
+- Ran npx prisma db push — schema synced successfully with database
+- Ran bun run lint — 0 errors (1 pre-existing warning in dashboard/route.ts)
+
+Stage Summary:
+- All 5 fixes applied successfully across 4 files
+- Database schema in sync with Prisma model
+- No lint errors introduced
+
+---
+Task ID: 3c-3f
+Agent: critical-api-fixes-batch1
+Task: Fix critical API bugs (cashback, mark-lunas, transactions filter, asset-value, approve route, sales tasks)
+
+Work Log:
+- Fix 1: Added `cashback_type, cashback_value` to customer select in mark-lunas route (line 55) so cashback calculation can access these fields
+- Fix 2: Added `else if (paymentMethod === 'piutang' || paymentMethod === 'tempo')` clause after transfer/giro block in mark-lunas route to handle piutang/tempo payments without courier — creates payment record with optional cashbox/bank destination
+- Fix 3: Added `paymentStatus` query parameter parsing and filter in transactions GET route (`eq('payment_status', paymentStatus)`)
+- Fix 4: Added `unit, sub_unit` to product select in asset-value route; extended `productValues` type with `unit`, `subUnit`, `conversionRate` fields; included these fields in push
+- Fix 5: Wrapped unit_products create/update block in approve route inside `if (product.stock_type === 'per_unit')` check — centralized products no longer get spurious unit_products entries during purchase approval
+- Fix 6: Added `completionNote` to destructured fields in sales-tasks PATCH route; added `if (completionNote) updateData.completion_note = completionNote.trim()` after completed_at assignment
+
+Stage Summary:
+- All 6 critical API fixes applied successfully
+- Lint passes with 0 errors (1 pre-existing warning in dashboard/route.ts)
+- Files modified: mark-lunas/route.ts, transactions/route.ts, asset-value/route.ts, approve/route.ts, sales-tasks/[id]/route.ts

@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     // ── Fetch all active products ──
     const { data: products, error } = await db
       .from('products')
-      .select('id, name, category, global_stock, avg_hpp, selling_price, sell_price_per_sub_unit, conversion_rate, min_stock, is_active')
+      .select('id, name, category, global_stock, avg_hpp, selling_price, sell_price_per_sub_unit, conversion_rate, unit, sub_unit, min_stock, is_active')
       .eq('is_active', true);
 
     if (error) {
@@ -43,6 +43,9 @@ export async function GET(request: NextRequest) {
       assetValue: number;
       stock: number;
       hpp: number;
+      unit: string | null;
+      subUnit: string | null;
+      conversionRate: number | null;
     }> = [];
 
     for (const p of productList) {
@@ -85,6 +88,9 @@ export async function GET(request: NextRequest) {
         assetValue,
         stock,
         hpp,
+        unit: p.unit || null,
+        subUnit: p.subUnit || null,
+        conversionRate: p.conversionRate ?? null,
       });
     }
 

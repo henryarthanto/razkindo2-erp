@@ -92,6 +92,7 @@ export async function GET(request: NextRequest) {
     const customerId = searchParams.get('customerId');
     const type = searchParams.get('type');
     const status = searchParams.get('status');
+    const paymentStatus = searchParams.get('paymentStatus');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
     const limit = searchParams.get('limit');
@@ -122,6 +123,7 @@ export async function GET(request: NextRequest) {
     if (customerId) query = query.eq('customer_id', customerId);
     if (type) query = query.eq('type', type);
     if (status) query = query.eq('status', status);
+    if (paymentStatus) query = query.eq('payment_status', paymentStatus);
     // Server-side enforcement: sales users can only see their own transactions
     if (authUserRole === 'sales') {
       query = query.eq('created_by_id', authUserId);

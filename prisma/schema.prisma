@@ -226,6 +226,10 @@ model PaymentProof {
   invoiceNo     String?  @map("invoice_no")
   fileUrl       String   @map("file_url")
   fileName      String?  @map("file_name")
+  fileSize      Int?     @map("file_size")
+  fileType      String?  @map("file_type")
+  customerName  String?  @map("customer_name")
+  notes         String?
   uploadedAt    DateTime @default(now()) @map("uploaded_at")
   viewed        Boolean  @default(false)
   createdAt     DateTime @default(now()) @map("created_at")
@@ -996,7 +1000,10 @@ model CustomerReferral {
   referralCustomerId String  @map("referral_customer_id") // Referred customer
   referralCode      String?  @map("referral_code")
   phone             String?
-  status            String   @default("pending") // pending, completed, rewarded
+  businessName      String?  @map("business_name")
+  picName           String?  @map("pic_name")
+  notes             String?
+  status            String   @default("new") // new, contacted, converted, completed, rewarded, lost
   bonusAmount       Float    @default(0) @map("bonus_amount")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
